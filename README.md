@@ -8,6 +8,8 @@ Beaver is a free, open-source network security monitor for **Windows and Linux**
 
 It is built for people who want to know whether someone is remote-controlling their PC, whether a program is sending their data somewhere it shouldn't, and whether anything is talking to known criminal infrastructure. Everything is analysed **on your device**: no account, no cloud, no telemetry.
 
+Beaver is written in **Rust**: a [Tauri](https://tauri.app/) desktop shell and a small native monitoring service, with a React UI in the system WebView. The Windows installer is 4.4 MB.
+
 [Download the latest release](https://github.com/AmoghShukla06/Beaver/releases/latest) · [How detection works](docs/DETECTION.md) · [Architecture](docs/ARCHITECTURE.md) · [Platform notes](docs/PLATFORMS.md)
 
 ![Beaver detecting a remote-access tool and ending the session](docs/screenshots/demo.gif)
@@ -38,16 +40,24 @@ It is built for people who want to know whether someone is remote-controlling th
 
 ## Built to run all day
 
-Beaver is designed to stay in the background permanently:
+Beaver is designed to stay in the background permanently. Version 2.0 replaced Electron and Python with Rust:
+
+| | 1.x (Electron + Python) | 2.0 (Rust) |
+|---|---|---|
+| Memory in the tray | about 280 MB | about 65 MB |
+| Monitoring service memory | 43 MB | 18 MB |
+| Service CPU at idle | 1.2% of one core | 0.5% of one core |
+| Windows installer | 128 MB | 4.4 MB |
+
 
 - **About 0.5% of one CPU core** for the Rust monitoring service at idle. The service runs at below-normal priority, so it never competes with your work.
 - **About 65 MB total in the tray** (shell plus an 18 MB service). Closing the window unloads the UI completely rather than hiding it, and GPU acceleration is off for this static UI.
 - **Push-based alerts**: the service pushes alerts to the tray process; nothing polls while the window is closed. A minimized window stops refreshing.
-- **Native packet capture** through libpcap/Npcap with a hand-written header parser: about 25× faster to start than a Scapy-based capture and about 5 MB of overhead. Only the first 128 bytes of a frame are copied, except DNS answers and TLS handshakes.
+- **Native packet capture** through libpcap/Npcap, loaded at runtime, with a hand-written Rust header parser. Only the first 128 bytes of a frame are copied, except DNS answers and TLS handshakes.
 - **Battery-aware**: with no window open on battery power, sampling slows from 2 s to 4 s.
 - **Bounded storage**: incremental SQLite writes, 7-day default retention, hard row caps.
 
-Measured on Windows 11 with 34 network-active apps and ~400 sockets; numbers vary by machine.
+Measured on Windows 11 with 30–50 network-active apps and 300–400 sockets; numbers vary by machine.
 
 ## Install
 
@@ -64,6 +74,8 @@ Builds are not code-signed yet. Windows SmartScreen may show *"Windows protected
 **Optional but recommended:**
 - **Windows:** install [Npcap](https://npcap.com/) for per-app speeds and domain names from DNS.
 - **Linux:** `sudo apt install libpcap0.8 nftables policykit-1`. For per-app speeds without root, see [Linux capture](docs/PLATFORMS.md#linux).
+
+**Upgrading from 1.x:** run the 2.0 installer. It removes the old version and keeps your history, settings, allowlist and firewall rules. On Debian/Ubuntu, installing the new `.deb` replaces `beaver-security`.
 
 On first launch a short setup asks about starting at sign-in, packet capture and notifications. On Windows, Beaver updates itself from GitHub Releases and verifies each installer's SHA-256 first (Settings → *Install updates automatically*); on Linux it tells you when a new release is out.
 
