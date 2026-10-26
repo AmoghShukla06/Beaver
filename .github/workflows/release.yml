@@ -56,7 +56,11 @@ jobs:
           merge-multiple: true
       # The in-app updater downloads the -setup.exe and refuses it unless its hash matches this file.
       - name: Checksums
-        run: cd dist && sha256sum *.exe *.AppImage *.deb > SHA256SUMS.txt && cat SHA256SUMS.txt
+        # Artifacts keep their bundle/<format>/ folders; flatten them first.
+        run: |
+          find dist -mindepth 2 -type f -exec mv -t dist {} +
+          find dist -mindepth 1 -type d -delete
+          cd dist && sha256sum *.exe *.AppImage *.deb > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Release notes
         run: |
           awk '/^## /{n++} n==1' CHANGELOG.md > notes.md
