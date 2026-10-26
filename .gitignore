@@ -12,3 +12,4 @@ release/
 *.sqlite*
 *.mmdb
 .env*
+packaging/*.preview.png

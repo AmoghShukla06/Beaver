@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bug, Copy, ExternalLink, FolderOpen, RefreshCw, Rocket } from "lucide-react";
 import { desktop, request, when } from "./api";
-import { Panel } from "./components";
+import { Panel, type Confirmation } from "./components";
 import type { AppInfo, UpdateState } from "./types";
 
 const REPO = "https://github.com/AmoghShukla06/Beaver";
@@ -37,7 +37,15 @@ function status(update: UpdateState) {
   }
 }
 
-export default function About({ info }: { info: AppInfo | null }) {
+export default function About({
+  info,
+  confirm,
+  rules,
+}: {
+  info: AppInfo | null;
+  confirm: (action: Confirmation) => void;
+  rules: number;
+}) {
   const [message, setMessage] = useState("");
   const run = (fn: () => Promise<unknown>, done: string) =>
     fn()
@@ -90,6 +98,31 @@ export default function About({ info }: { info: AppInfo | null }) {
           </a>
         </p>
         <p className="small muted">Apache-2.0 · Diagnostics hide usernames and IP addresses.</p>
+        <div className="danger-zone">
+          <span>
+            <strong>Delete all Beaver data</strong>
+            <small>History, alerts, allowlist, settings and logs. Beaver restarts with a fresh setup.</small>
+          </span>
+          <button
+            className="danger-button"
+            disabled={!desktop}
+            onClick={() =>
+              confirm({
+                title: "Delete all Beaver data?",
+                description:
+                  "Beaver will delete its connection history, alerts, allowlist, settings, downloaded threat feeds and logs on this computer, then restart." +
+                  (rules
+                    ? ` Your ${rules} firewall rule${rules === 1 ? " stays" : "s stay"} active in the operating system; remove ${rules === 1 ? "it" : "them"} in Firewall first if you want ${rules === 1 ? "it" : "them"} gone.`
+                    : "") +
+                  " This cannot be undone.",
+                label: "Delete everything",
+                run: () => request("reset_data"),
+              })
+            }
+          >
+            Delete data…
+          </button>
+        </div>
       </div>
     </Panel>
   );

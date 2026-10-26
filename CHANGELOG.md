@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0
+
+### Installer
+- Branded Windows setup wizard: welcome page, Apache-2.0 license page, *Startup and protection* page (start at sign-in, Npcap link), and a finish page with *Open Beaver now*. Artwork is rendered from the brand mark (`scripts/render-installer-art.cjs`).
+- The installer's start-at-sign-in choice is applied by the app on first launch through its normal login-item code.
+- Branded uninstaller with a *What should be removed?* page: remove Beaver's firewall rules, and optionally delete history, alerts, settings and logs. Automatic updates never show these pages and keep everything.
+- Linux .deb: removing the package deletes Beaver's nftables tables and stale autostart entries (upgrades keep them). The post-install message explains optional capture permissions.
+
+### App
+- Settings → About → **Delete all Beaver data**: wipes history, alerts, allowlist, settings, feeds and logs, then restarts into first-run setup. This also covers Linux, where packages don't delete home data.
+
 ## 1.2.1
 
 ### Fixes

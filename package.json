@@ -1,6 +1,6 @@
 {
   "name": "beaver-security",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "private": true,
   "description": "Open-source network security monitor for Windows and Linux: live connections, threat intelligence, remote-access and data-theft detection, native firewall control.",
   "license": "Apache-2.0",
@@ -86,7 +86,13 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Beaver",
-      "include": "packaging/installer.nsh"
+      "include": "packaging/installer.nsh",
+      "license": "LICENSE",
+      "installerSidebar": "packaging/installer-sidebar.bmp",
+      "uninstallerSidebar": "packaging/uninstaller-sidebar.bmp",
+      "installerHeader": "packaging/installer-header.bmp",
+      "uninstallDisplayName": "Beaver",
+      "runAfterFinish": true
     },
     "linux": {
       "target": [
@@ -125,7 +131,9 @@
         "nftables",
         "policykit-1",
         "libcap2-bin"
-      ]
+      ],
+      "afterInstall": "packaging/linux/after-install.sh",
+      "afterRemove": "packaging/linux/after-remove.sh"
     },
     "publish": [
       {

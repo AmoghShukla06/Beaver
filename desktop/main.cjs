@@ -141,6 +141,7 @@ async function start() {
   }
   try {
     settings = await backend.call("settings", { patch: {} });
+    await applyInstallerOptions();
     applyLoginItem(settings.start_at_login);
   } catch {
     /* The window shows service errors. */
@@ -197,6 +198,26 @@ function startUpdater() {
 function installUpdate() {
   quitting = true;
   updater?.quitAndInstall(false, true);
+}
+
+// The Windows installer's "Start Beaver when I sign in" choice, applied once and then removed.
+async function applyInstallerOptions() {
+  if (!app.isPackaged) return;
+  const file = path.join(process.resourcesPath, "installer-options.json");
+  let options;
+  try {
+    options = JSON.parse(fsSync.readFileSync(file, "utf8"));
+  } catch {
+    return;
+  }
+  try {
+    if (typeof options.start_at_login === "boolean")
+      settings = await backend.call("settings", { patch: { start_at_login: options.start_at_login } });
+    fsSync.rmSync(file, { force: true });
+    log("applied installer options: " + JSON.stringify(options));
+  } catch (error) {
+    log("installer options not applied: " + error.message);
+  }
 }
 
 function startBackend() {
@@ -408,6 +429,21 @@ function registerIpc() {
   ipcMain.handle("beaver:dismiss_whats_new", (event) => {
     trusted(event);
     whatsNew = null;
+    return { ok: true };
+  });
+  ipcMain.handle("beaver:reset_data", async (event) => {
+    trusted(event);
+    // Stop the service (it holds the database), delete everything Beaver stored, then start fresh.
+    quitting = true;
+    applyLoginItem(false);
+    const exited = backend.exited;
+    backend.close();
+    await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))]);
+    logFile = null;
+    await fs.rm(dataDir(), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    fsSync.rmSync(path.join(app.getPath("userData"), "last-version"), { force: true });
+    app.relaunch();
+    app.exit(0);
     return { ok: true };
   });
   ipcMain.handle("beaver:open_logs", async (event) => {

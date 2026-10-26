@@ -57,6 +57,7 @@ class Backend {
       },
     );
     this.child.on("error", (err) => this.fail(err.message));
+    this.exited = new Promise((resolve) => this.child.once("exit", resolve));
     this.child.on("exit", (code) => {
       this.fail("Telemetry service stopped. Beaver is restarting it.");
       if (!this.closing) log?.("service exited with code " + code);

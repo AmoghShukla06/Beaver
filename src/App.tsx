@@ -1350,7 +1350,7 @@ export default function App() {
                           </div>
                         </div>
                       </Panel>
-                      <About info={info} />
+                      <About info={info} confirm={setConfirmation} rules={data.rules.length} />
                     </div>
                   </div>
                 )}

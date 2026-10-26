@@ -216,6 +216,7 @@ export type Method =
   | "open_logs"
   | "copy_text"
   | "copy_diagnostics"
+  | "reset_data"
   | "pick_geoip"
   | "export_history"
   | "test_notification";

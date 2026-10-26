@@ -2090,6 +2090,24 @@ dialog.onboarding {
   color: var(--blue);
 }
 
+/* v1.3: danger zone */
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.danger-zone strong {
+  display: block;
+  font-size: 13px;
+}
+.danger-zone small {
+  color: var(--muted);
+}
+
 /* v1.2: about, what's new */
 .about-version {
   display: grid;
