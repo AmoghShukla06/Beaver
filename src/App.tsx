@@ -427,7 +427,9 @@ export default function App() {
                               ? "If you did not start this session yourself, end it now from the Remote shield."
                               : levels("High") + levels("Medium")
                                 ? `${levels("High") + levels("Medium")} app${levels("High") + levels("Medium") === 1 ? "" : "s"} worth a look.`
-                                : `All clear. ${data.coverage.intel.entries.toLocaleString()} threat indicators checked locally.`}
+                                : unreviewed
+                                  ? "Review the evidence, then acknowledge or act."
+                                  : `All clear. ${data.coverage.intel.entries.toLocaleString()} threat indicators checked locally.`}
                         </p>
                       </div>
                       <button

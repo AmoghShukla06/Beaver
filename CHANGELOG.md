@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1
+
+### Fixes
+- Full screen on wide displays: content now fills the window up to the scrollbar instead of stopping at 1900 px and leaving an empty band on the right.
+- The overview banner no longer says "All clear" while alerts are waiting for review.
+
 ## 1.2.0
 
 ### Polish
