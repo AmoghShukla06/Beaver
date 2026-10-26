@@ -1,6 +1,7 @@
 """Opt-in metadata-only capture. Headers are parsed in place; packet bytes and payloads are never retained."""
 import collections
 import ctypes
+import logging
 import threading
 import time
 
@@ -126,6 +127,7 @@ class Capture:
                 thread.start()
         except Exception as exc:
             self.error=str(exc)[:300]; self.close_handles()
+            logging.getLogger("beaver").warning("Capture unavailable: %s",exc)
 
     def status(self):
         active=self.running.is_set() and any(t.is_alive() for t in self.threads)

@@ -16,17 +16,56 @@ import {
 } from "lucide-react";
 import { bytes } from "./api";
 import type { Evidence, ObservedApp, RiskLevel, TrafficPoint } from "./types";
+// Same geometry as scripts/create-icons.py, so the app icon, tray and sidebar match.
+export function BrandMark({ size = 34 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M32 5L55 13L53 35Q49 50 32 59Q15 50 11 35L9 13Z" fill="#62dfac" />
+      <path
+        d="M23.5 26H31V39.5Q31 42 28.5 42H26Q23.5 42 23.5 39.5ZM33 26H40.5V39.5Q40.5 42 38 42H35.5Q33 42 33 39.5Z"
+        fill="#f5f0e1"
+      />
+      <path d="M17 25Q32 16 47 25L47 30Q32 22 17 30Z" fill="#0b1018" />
+    </svg>
+  );
+}
 export function Brand() {
   return (
     <div className="brand">
       <span className="brand-mark">
-        <Shield size={32} strokeWidth={2.4} />
-        <span className="brand-teeth">▰</span>
+        <BrandMark />
       </span>
       <span>
         Beaver<span className="brand-dot">.</span>
       </span>
     </div>
+  );
+}
+const icons = new Map<string, Promise<string | null>>();
+export function AppIcon({
+  name,
+  path,
+  large = false,
+}: {
+  name: string;
+  path?: string | null;
+  large?: boolean;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path || !window.beaver) return;
+    let live = true;
+    if (!icons.has(path))
+      icons.set(path, window.beaver.icon({ path }).catch(() => null));
+    icons.get(path)!.then((value) => live && setSrc(value));
+    return () => {
+      live = false;
+    };
+  }, [path]);
+  return (
+    <span className={"app-avatar" + (large ? " large" : "") + (src ? " has-icon" : "")} aria-hidden="true">
+      {src ? <img src={src} alt="" /> : (name[0] || "?").toUpperCase()}
+    </span>
   );
 }
 export function Panel({
@@ -129,6 +168,12 @@ export function SignatureBadge({ app }: { app: ObservedApp }) {
   );
 }
 type SortKey = "risk" | "name" | "connections" | "traffic";
+// Kernel, idle and ownerless sockets: real, but noise at the top of an app list.
+const isSystem = (a: ObservedApp) =>
+  !a.path &&
+  (a.id === "unattributed" ||
+    a.id.startsWith("unavailable-") ||
+    /^(system|system idle process|idle|registry|memory compression|secure system)$/i.test(a.name));
 export function Search({
   value,
   onChange,
@@ -170,7 +215,9 @@ export function AppTable({
   compact = false,
   page = 0,
   onPage,
+  group = true,
 }: {
+  group?: boolean;
   apps: ObservedApp[];
   onSelect: (app: ObservedApp) => void;
   compact?: boolean;
@@ -178,6 +225,10 @@ export function AppTable({
   onPage?: (page: number) => void;
 }) {
   const size = compact ? 5 : 20;
+  const [showSystem, setShowSystem] = useState(false);
+  const system = group ? apps.filter(isSystem) : [];
+  const all = apps;
+  apps = showSystem && !compact ? all : all.filter((a) => !system.includes(a));
   const [sort, setSort] = useState<{ key: SortKey; down: boolean }>({
     key: "risk",
     down: true,
@@ -240,9 +291,7 @@ export function AppTable({
               <tr key={app.id}>
                 <td>
                   <button className="app-name" onClick={() => onSelect(app)}>
-                    <span className="app-avatar">
-                      {app.name.slice(0, 1).toUpperCase()}
-                    </span>
+                    <AppIcon name={app.name} path={app.path} />
                     <span>
                       <strong>{app.name}</strong>
                       <small>
@@ -259,7 +308,7 @@ export function AppTable({
                 <td className="numeric">{app.connections}</td>
                 <td>
                   <RiskBadge level={app.risk.level} />
-                  {app.risk.score != null && app.risk.score > 0 && (
+                  {app.risk.score != null && app.risk.score >= 30 && (
                     <span className="score-chip">{app.risk.score}</span>
                   )}
                 </td>
@@ -281,6 +330,13 @@ export function AppTable({
           </tbody>
         </table>
       </div>
+      {system.length > 0 && !compact && (
+        <button className="system-toggle text-button" onClick={() => setShowSystem((v) => !v)}>
+          {showSystem ? "Hide" : "Show"} {system.length} system and unowned{" "}
+          {system.length === 1 ? "entry" : "entries"} ·{" "}
+          {system.reduce((n, a) => n + a.connections, 0)} sockets
+        </button>
+      )}
       {!slice.length && (
         <Empty title="No matching applications">
           Try a different search, or wait for the next network sample.
@@ -452,6 +508,7 @@ export interface Confirmation {
   description: string;
   label: string;
   run: () => Promise<unknown>;
+  done?: string;
 }
 export function Confirm({
   action,

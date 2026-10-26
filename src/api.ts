@@ -36,7 +36,17 @@ export function bytes(value: number | null | undefined, rate = false): string {
   );
 }
 export function when(value: number | null | undefined): string {
-  return value ? new Date(value * 1000).toLocaleString() : "Not yet";
+  if (!value) return "Not yet";
+  const seconds = Date.now() / 1000 - value;
+  if (seconds < 45) return "just now";
+  if (seconds < 3600) return Math.round(seconds / 60) + " min ago";
+  if (seconds < 86400) return Math.round(seconds / 3600) + " h ago";
+  const date = new Date(value * 1000);
+  return (
+    date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+    ", " +
+    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
 }
 export const isStale = (snapshot: Snapshot | null, now = Date.now()) =>
   !snapshot?.sampled_at ||

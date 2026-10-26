@@ -208,9 +208,31 @@ export type Method =
   | "allowlist"
   | "terminate"
   | "verify_rules"
+  | "icon"
+  | "app_info"
+  | "check_updates"
+  | "restart_update"
+  | "dismiss_whats_new"
+  | "open_logs"
+  | "copy_text"
+  | "copy_diagnostics"
   | "pick_geoip"
   | "export_history"
   | "test_notification";
+export interface UpdateState {
+  state: "disabled" | "off" | "idle" | "checking" | "latest" | "downloading" | "ready" | "error";
+  version?: string;
+  percent?: number;
+  checked_at?: number;
+  error?: string | null;
+}
+export interface AppInfo {
+  version: string;
+  electron: string;
+  packaged: boolean;
+  update: UpdateState;
+  whats_new: { from: string; to: string } | null;
+}
 export interface Navigation {
   page: string;
   app_id?: string;
@@ -219,6 +241,7 @@ export interface Navigation {
 export type NativeAPI = Record<Method, (params?: object) => Promise<any>> & {
   on_navigate: (callback: (target: Navigation) => void) => () => void;
   on_alert: (callback: (alert: Alert) => void) => () => void;
+  on_update: (callback: (state: UpdateState) => void) => () => void;
 };
 declare global {
   interface Window {

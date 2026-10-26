@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/beaver.png" width="96" alt="Beaver logo"></p>
+
 # Beaver
 
 **Know what connects. Stop who shouldn't.**
@@ -8,7 +10,13 @@ It is built for people who want to know whether someone is remote-controlling th
 
 [Download the latest release](https://github.com/AmoghShukla06/Beaver/releases/latest) · [How detection works](docs/DETECTION.md) · [Architecture](docs/ARCHITECTURE.md) · [Platform notes](docs/PLATFORMS.md)
 
-![Beaver Remote access & data-theft shield](docs/screenshots/remote-shield.png)
+![Beaver detecting a remote-access tool and ending the session](docs/screenshots/demo.gif)
+
+<sub>Recorded on a clean profile with a simulated remote-access tool (a renamed binary that opens one connection), so no real user data is shown.</sub>
+
+| First run | Alert with evidence | Settings |
+|---|---|---|
+| ![Setup](docs/screenshots/onboarding.png) | ![Alerts](docs/screenshots/alerts.png) | ![Settings](docs/screenshots/settings.png) |
 
 ---
 
@@ -103,6 +111,10 @@ Threat-feed matches are never suppressed by allowlists. A valid publisher signat
 ## Limitations
 
 Beaver is a network-behavior monitor, not a full antivirus. It does not scan files for malware signatures or decrypt TLS. With capture on, encrypted-DNS lookups are still named through the TLS server name, except for sites that use Encrypted Client Hello and for QUIC/HTTP-3 connections. Sockets are sampled every 2 seconds, so very short connections can be missed. Linux executable-path blocking is not available in nftables (endpoint and port rules are). See [SECURITY.md](SECURITY.md) for the threat model.
+
+## Reporting a problem
+
+Open **Settings → About → Copy diagnostics** and paste the result into a [new issue](https://github.com/AmoghShukla06/Beaver/issues/new). It includes versions, coverage and recent log lines, with usernames and IP addresses redacted. Logs live in the data folder under `logs/` (*Open logs*).
 
 ## Contributing
 

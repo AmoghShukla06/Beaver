@@ -38,6 +38,7 @@ import {
   TrafficChart,
   type Confirmation,
 } from "./components";
+import About, { useAppInfo } from "./About";
 import Connections from "./Connections";
 import Investigation from "./Investigation";
 import Onboarding from "./Onboarding";
@@ -118,6 +119,7 @@ export default function App() {
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [retry, setRetry] = useState(0);
   const [alertFilter, setAlertFilter] = useState("Unreviewed");
+  const [info, setInfo] = useAppInfo();
   const [target, setTarget] = useState<{ page: string; app_id?: string } | null>(null);
   const refresh = useCallback(async () => {
     const value = await request<Snapshot>("snapshot");
@@ -181,7 +183,7 @@ export default function App() {
     setFailure("");
     try {
       const result = await fn();
-      if (!result?.cancelled) setNotice(message);
+      if (!result?.cancelled && message) setNotice(message);
       await refresh();
     } catch (e) {
       setFailure((e as Error).message);
@@ -222,7 +224,7 @@ export default function App() {
       run: () => request("allowlist", { kind, target, enabled }),
     });
   const update = (patch: object) =>
-    perform(() => request("settings", { patch }), "Settings saved.");
+    perform(() => request("settings", { patch }), ""); // toggles show their own state; only errors toast
   const stale = isStale(data, now) || Boolean(error);
   const selectedApp =
     data?.apps.find((app) => app.id === selected?.id) || selected;
@@ -279,7 +281,7 @@ export default function App() {
             <small>Your data stays on this device.</small>
           </div>
         </div>
-        <span className="version">BEAVER / 1.0.0</span>
+        <span className="version">BEAVER{info?.version ? " / " + info.version : ""}</span>
       </aside>
       <main>
         <header className="page-header">
@@ -362,6 +364,34 @@ export default function App() {
               <>
                 {page === "overview" && (
                   <>
+                    {info?.whats_new && (
+                      <div className="whats-new" role="status">
+                        <span>
+                          Beaver was updated to {info.whats_new.to}.{" "}
+                          <a
+                            href={
+                              "https://github.com/AmoghShukla06/Beaver/releases/tag/v" +
+                              info.whats_new.to
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            See what's new
+                          </a>
+                        </span>
+                        <button
+                          className="icon-button"
+                          aria-label="Dismiss update note"
+                          onClick={() =>
+                            request("dismiss_whats_new").then(() =>
+                              setInfo({ ...info, whats_new: null }),
+                            )
+                          }
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    )}
                     <div
                       className={
                         "protection-band " + (unreviewed ? "attention" : "")
@@ -395,7 +425,9 @@ export default function App() {
                             ? "Coverage is limited until the local service responds."
                             : remoteLive.length
                               ? "If you did not start this session yourself, end it now from the Remote shield."
-                              : `${data.coverage.intel.entries.toLocaleString()} threat indicators · ${levels("High")} high and ${levels("Medium")} medium-risk apps · explainable detections, you stay in control.`}
+                              : levels("High") + levels("Medium")
+                                ? `${levels("High") + levels("Medium")} app${levels("High") + levels("Medium") === 1 ? "" : "s"} worth a look.`
+                                : `All clear. ${data.coverage.intel.entries.toLocaleString()} threat indicators checked locally.`}
                         </p>
                       </div>
                       <button
@@ -647,12 +679,9 @@ export default function App() {
                             <h3>No alerts recorded</h3>
                             <p>
                               {data.coverage.intel.fresh
-                                ? "New high-risk detections will appear here."
-                                : "Load threat intelligence to assess known malicious endpoints."}
+                                ? "You'll see high-risk and remote-access activity here."
+                                : "Refresh threat intelligence in Settings."}
                             </p>
-                            <span className="subtle-tag">
-                              Visibility is not a safety guarantee
-                            </span>
                           </div>
                         )}
                       </Panel>
@@ -699,16 +728,9 @@ export default function App() {
                         onSelect={setSelected}
                         page={appPage}
                         onPage={setAppPage}
+                        group={filter === "All" && !search}
                       />
                     </Panel>
-                    <div className="info-line">
-                      <CircleAlert size={16} />
-                      <span>
-                        Process visibility depends on OS permissions.
-                        Short-lived connections may be missed between two-second
-                        samples. Application speeds require packet capture.
-                      </span>
-                    </div>
                   </>
                 )}
                 {page === "protection" && (
@@ -741,16 +763,6 @@ export default function App() {
                 )}
                 {page === "alerts" && (
                   <>
-                    <div className="info-line">
-                      <Shield size={17} />
-                      <span>
-                        High and Medium detections are preserved locally. The
-                        same evidence from the same application is recorded once
-                        every 12 hours; new evidence raises a new alert.
-                        Acknowledging does not change evidence or unblock
-                        traffic.
-                      </span>
-                    </div>
                     <div className="toolbar">
                       <div className="segmented" aria-label="Alert filter">
                         {["Unreviewed", "High", "Medium", "New apps", "All"].map((f) => (
@@ -906,11 +918,8 @@ export default function App() {
                     <div className="info-line">
                       <LockKeyhole size={17} />
                       <span>
-                        Beaver only manages its own rules. Rules persist after
-                        Beaver exits. Endpoint rules affect all applications.
-                        Beaver checks its rules against the OS firewall at
-                        startup and when you choose Verify; a rule removed
-                        outside Beaver is marked missing.
+                        Beaver only touches its own rules. They stay in place
+                        after Beaver exits.
                       </span>
                     </div>
                     <Panel
@@ -964,6 +973,20 @@ export default function App() {
                                 </small>
                                 <span className="mono small">{rule.id}</span>
                               </div>
+                              {["missing", "inactive", "unverified"].includes(rule.state) && (
+                                <button
+                                  className="primary"
+                                  disabled={busy || !desktop}
+                                  onClick={() =>
+                                    perform(
+                                      () => request("block", { kind: rule.kind, target: rule.target }),
+                                      "Rule re-applied.",
+                                    )
+                                  }
+                                >
+                                  Re-apply
+                                </button>
+                              )}
                               <button
                                 disabled={busy || !desktop}
                                 onClick={() =>
@@ -1040,7 +1063,7 @@ export default function App() {
                         <div className="panel-body">
                           <Toggle
                             label="Native desktop notifications"
-                            description="Notify on new high-risk and remote-access detections, including while Beaver runs in the tray."
+                            description="High risk and remote access, even when the window is closed."
                             checked={data.settings.notifications}
                             disabled={busy || !desktop}
                             onChange={() =>
@@ -1051,7 +1074,7 @@ export default function App() {
                           />
                           <Toggle
                             label="Notify when a new app goes online"
-                            description="Once per program, the first time it reaches the internet. Windows components are skipped."
+                            description="Once per program, the first time it goes online."
                             checked={data.settings.notify_new_apps}
                             disabled={busy || !desktop || !data.settings.notifications}
                             onChange={() =>
@@ -1062,7 +1085,7 @@ export default function App() {
                           />
                           <Toggle
                             label="Also notify for Medium risk"
-                            description="Medium alerts are always recorded. Turn this on to be notified about them too."
+                            description="Medium alerts are always recorded in Alerts."
                             checked={data.settings.notify_medium}
                             disabled={busy || !desktop || !data.settings.notifications}
                             onChange={() =>
@@ -1101,7 +1124,7 @@ export default function App() {
                           </button>
                           <Toggle
                             label="Automatic threat-feed updates"
-                            description="Download enabled threat feeds when they are due (hourly for botnet C2, twice a day for the rest). Observed IPs, domains and application data are never uploaded."
+                            description="Downloads lists only; nothing about your traffic is sent."
                             checked={data.settings.feed_updates}
                             disabled={busy || !desktop}
                             onChange={() =>
@@ -1180,12 +1203,6 @@ export default function App() {
                                 : "Refresh threat intelligence"}
                             </button>
                           </div>
-                          <p className="small muted">
-                            Sources: abuse.ch Feodo Tracker, Spamhaus DROP,
-                            HaGeZi Threat Intelligence, Emerging Threats and
-                            IPsum. Matching is entirely local. Stale feeds stop
-                            producing detections. Provider terms apply.
-                          </p>
                         </div>
                       </Panel>
                       <Panel
@@ -1195,27 +1212,30 @@ export default function App() {
                         <div className="panel-body">
                           <Toggle
                             label="Packet metadata capture"
-                            description="Measure attributable application traffic and observe plaintext DNS. Requires Npcap on Windows or packet-capture permissions on Linux. Payloads are never stored."
+                            description="Per-app speeds and website names. Reads headers only."
                             checked={data.settings.capture}
                             disabled={busy || !desktop}
                             onChange={() =>
                               update({ capture: !data.settings.capture })
                             }
                           />
+                          {(data.settings.capture || data.coverage.capture.available === false) && (
                           <div className="inline-note">
                             {data.coverage.capture.active
                               ? data.coverage.capture.packets.toLocaleString() +
                                 " packets observed · " +
                                 data.coverage.capture.attributed.toLocaleString() +
-                                " attributed to applications. Capture covers interfaces available when enabled."
+                                " attributed to apps · " +
+                                (data.coverage.capture.server_names || 0).toLocaleString() +
+                                " website names"
                               : data.coverage.capture.error ||
-                                "Capture is off. Socket inventory and aggregate interface traffic remain available."}
+                                (data.coverage.capture.available === false
+                                  ? data.coverage.platform === "Windows"
+                                    ? "Install Npcap to enable capture."
+                                    : "Install libpcap to enable capture."
+                                  : "Starting…")}
                           </div>
-                          <p className="small muted">
-                            {data.coverage.inventory} {data.coverage.domains}{" "}
-                            OS-level restrictions can limit visibility even when
-                            capture is enabled.
-                          </p>
+                          )}
                         </div>
                       </Panel>
                     </div>
@@ -1252,7 +1272,7 @@ export default function App() {
                             Choose local database
                           </button>
                           <button className="primary geo-download" disabled={busy || !desktop} onClick={() => perform(() => request("download_geoip"), "Offline City database downloaded and configured.")}><Download size={15}/>{busy ? "Working…" : "Download free City database"}</button>
-                          <p className="small muted">Downloads the monthly DB-IP City Lite database (CC BY 4.0; may use up to 150 MB). No observed IP addresses are sent. <a href="https://db-ip.com/" target="_blank" rel="noreferrer">IP Geolocation by DB-IP</a>.</p>
+                          <p className="small muted">About 130 MB, monthly. <a href="https://db-ip.com/" target="_blank" rel="noreferrer">IP Geolocation by DB-IP</a> (CC BY 4.0).</p>
                           {data.settings.geoip_path && (
                             <button
                               className="text-button"
@@ -1262,18 +1282,13 @@ export default function App() {
                               Remove database
                             </button>
                           )}
-                          <p className="small muted">
-                            Obtain a City database from your preferred licensed
-                            provider. Approximate geolocation never contributes
-                            to risk.
-                          </p>
                         </div>
                       </Panel>
                       <Panel title="Privacy & desktop" className="spaced-panel">
                         <div className="panel-body">
                           <Toggle
                             label="Start Beaver when I sign in"
-                            description="Start monitoring in the tray at sign-in without opening a window."
+                            description="Starts quietly in the tray."
                             checked={data.settings.start_at_login}
                             disabled={busy || !desktop}
                             onChange={() =>
@@ -1284,7 +1299,7 @@ export default function App() {
                           />
                           <Toggle
                             label="Install updates automatically"
-                            description="Checks GitHub Releases at startup and every 6 hours, downloads in the background, and installs when Beaver restarts. Only the version check leaves your device."
+                            description="From GitHub Releases, installed on restart."
                             checked={data.settings.auto_update}
                             disabled={busy || !desktop}
                             onChange={() =>
@@ -1293,7 +1308,7 @@ export default function App() {
                           />
                           <Toggle
                             label="Close to system tray"
-                            description="Keep monitoring when the window closes. The window is fully unloaded to save memory. Choose Quit Beaver from the tray to stop."
+                            description="Keeps monitoring in the tray. Quit from the tray menu."
                             checked={data.settings.close_to_tray}
                             disabled={busy || !desktop}
                             onChange={() =>
@@ -1321,11 +1336,6 @@ export default function App() {
                               ))}
                             </select>
                           </label>
-                          <p className="small muted">
-                            Expired history is pruned within a minute. Storage
-                            is bounded to 100,000 connection records and 10,000
-                            alerts.
-                          </p>
                           <label className="small muted">
                             Local data directory
                           </label>
@@ -1333,12 +1343,12 @@ export default function App() {
                           <div className="privacy-note">
                             <Leaf size={17} />
                             <span>
-                              No analytics. No cloud account. No payload
-                              storage.
+                              No analytics, no account. Your data stays here.
                             </span>
                           </div>
                         </div>
                       </Panel>
+                      <About info={info} />
                     </div>
                   </div>
                 )}
@@ -1367,7 +1377,7 @@ export default function App() {
           data={data}
           busy={busy}
           update={(patch) =>
-            perform(() => request("settings", { patch }), "Settings saved.")
+            perform(() => request("settings", { patch }), "")
           }
         />
       )}
@@ -1381,7 +1391,7 @@ export default function App() {
               const result = await confirmation.run();
               setConfirmation(null);
               return result;
-            }, "Network control updated.");
+            }, confirmation.done || "Network control updated.");
         }}
       />
       {notice && (

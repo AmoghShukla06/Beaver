@@ -236,6 +236,13 @@ const until = async (page, predicate, { timeout = 20000 } = {}) => {
       .filter({ hasText: "Test notification requested" })
       .waitFor();
     passed.push("Native notification API invocation");
+    await page.getByRole("heading", { name: "About Beaver" }).waitFor();
+    await page.getByRole("button", { name: "Copy diagnostics" }).click();
+    await page.getByText("Diagnostics copied").waitFor();
+    const report = await app.evaluate(({ clipboard }) => clipboard.readText());
+    assert(report.includes("## Beaver diagnostics") && report.includes('"feeds"'));
+    assert(!report.toLowerCase().includes(os.userInfo().username.toLowerCase()), "diagnostics leaked the username");
+    passed.push("About panel copies redacted diagnostics");
     await page.screenshot({
       path: path.join(output, "settings.png"),
       fullPage: true,

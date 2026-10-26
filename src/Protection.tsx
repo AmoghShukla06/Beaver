@@ -64,6 +64,7 @@ export default function Protection({
         app.pids.join(", ") +
         "). Anyone connected through it is disconnected immediately. Unsaved work in that program is lost. If the program runs as a system service, block it in Firewall as well.",
       label: "End session",
+      done: "Session ended. " + (app.risk.remote_tool || app.name) + " is no longer running.",
       run: () => request("terminate", { app_id: app.id }),
     });
   const toggleLockdown = () =>
@@ -179,10 +180,7 @@ export default function Protection({
                 ? "Reachable remote-login services on this computer: " + exposed.join(", ") + "."
                 : "No remote-login service (RDP, VNC, Telnet, WinRM, SSH) is listening on a network address."}
             </p>
-            <p className="small muted">
-              Lockdown blocks incoming Remote Desktop, VNC, Telnet, WinRM and TeamViewer direct connections from every network with a single firewall rule. It does not
-              stop support tools that connect outward through a relay, which is why those are listed separately.
-            </p>
+            <p className="small muted">Blocks incoming Remote Desktop, VNC, Telnet, WinRM and TeamViewer connections. SSH is left alone.</p>
             <button
               className={lockdown ? "" : "primary"}
               disabled={busy || !desktop || !data.firewall.ports}
@@ -219,7 +217,7 @@ export default function Protection({
             </div>
           ) : (
             <Empty title="No data-theft signals">
-              Beaver flags uploads to Telegram bots and anonymous file-sharing services, command shells connected to the internet, and lopsided upload volume.
+              Watching for uploads to Telegram bots and file-sharing sites, and shells connected to the internet.
               {!data.coverage.capture.active && !data.coverage.dns_cache.names
                 ? " Enable packet capture to see domain-based signals."
                 : ""}
@@ -230,14 +228,14 @@ export default function Protection({
           <div className="panel-body">
             <Toggle
               label="Stop confirmed threats automatically"
-              description="When an unsigned program shows a reverse shell, process impersonation, fileless execution, a tampered signature, a threat-feed match or a data-theft channel at High risk, Beaver ends it immediately and tells you. Signed and operating-system programs are never stopped automatically."
+              description="Ends unsigned programs caught at High risk. Signed and Windows programs are never stopped."
               checked={data.settings.active_protection}
               disabled={busy || !desktop}
               onChange={() => update({ active_protection: !data.settings.active_protection })}
             />
             <Toggle
               label="Always notify about remote access"
-              description="Show a notification whenever remote-control software connects or someone logs in from the internet, even if Medium-risk notifications are off."
+              description="Whenever remote-control software connects or someone logs in from the internet."
               checked={data.settings.remote_alerts}
               disabled={busy || !desktop}
               onChange={() => update({ remote_alerts: !data.settings.remote_alerts })}

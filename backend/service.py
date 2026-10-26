@@ -1,7 +1,10 @@
 """Private line-delimited JSON RPC over inherited stdin/stdout. No listening socket."""
 import argparse
 import json
+import logging
+import logging.handlers
 import os
+import platform
 from pathlib import Path
 import sys
 import threading
@@ -33,13 +36,15 @@ class Service:
             response={"id":request.get("id"),"result":self.dispatch(request["method"],request.get("params",{}))}
         except Exception as exc:
             response={"id":request.get("id"),"error":str(exc)[:600]}
+            if not isinstance(exc,(ValueError,KeyError)):  # validation errors are user-facing, not faults
+                logging.getLogger("beaver").exception("RPC %s failed",request.get("method"))
         self.send(response)
 
     def dispatch(self,method,params):
         if not isinstance(params,dict):
             raise ValueError("Expected an object")
         if method=="snapshot":
-            return self.monitor.snapshot() | {"alerts":self.store.alerts(),"rules":self.store.rules(),
+            return self.monitor.snapshot() | {"alerts":self.store.alerts(),"rules":self.firewall.rules(),
                 "settings":self.store.settings(),"allowlist":self.store.allowlist(),"firewall":self.firewall.capabilities(),"data_path":str(self.store.directory)}
         if method=="history":
             return self.store.history(str(params["app_id"]),params.get("offset",0),params.get("limit",50))
@@ -90,8 +95,17 @@ def background_priority():
     except (psutil.Error,OSError,AttributeError):
         pass
 
+def setup_logging(directory):
+    """Local rotating log (about 3 MB max). Errors only; never connection data."""
+    folder=Path(directory)/"logs"; folder.mkdir(parents=True,exist_ok=True)
+    handler=logging.handlers.RotatingFileHandler(folder/"service.log",maxBytes=1_000_000,backupCount=2,encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger=logging.getLogger("beaver"); logger.addHandler(handler); logger.setLevel(logging.INFO)
+    logger.info("Service started on %s %s (Python %s)",platform.system(),platform.release(),platform.python_version())
+
 def main():
     parser=argparse.ArgumentParser(); parser.add_argument("--data-dir",required=True); args=parser.parse_args()
+    setup_logging(args.data_dir)
     background_priority()
     service=Service(args.data_dir,sys.stdout); service.monitor.start()
     threading.Thread(target=service.firewall.verify_quietly,daemon=True).start()

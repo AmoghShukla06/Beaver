@@ -162,13 +162,7 @@ strong {
   display: flex;
   color: var(--accent);
 }
-.brand-teeth {
-  position: absolute;
-  font-size: 15px;
-  left: 9px;
-  top: 5px;
-  transform: rotate(-28deg);
-}
+
 nav {
   display: flex;
   flex-direction: column;
@@ -1355,8 +1349,8 @@ dialog {
   box-shadow: 0 25px 100px #0009;
 }
 dialog::backdrop {
-  background: #020711b8;
-  backdrop-filter: blur(3px);
+  /* No backdrop-filter: it renders mirrored under software compositing (GPU acceleration is off). */
+  background: #020711de;
 }
 .dialog-content {
   padding: 28px;
@@ -1485,9 +1479,6 @@ dialog::backdrop {
   .sidebar-bottom {
     padding: 24px 15px;
   }
-  .brand-teeth {
-    display: block;
-  }
   main {
     margin-left: 76px;
   }
@@ -1568,11 +1559,7 @@ dialog::backdrop {
   }
   .brand-mark > svg {
     width: 26px;
-  }
-  .brand-teeth {
-    left: 7px;
-    top: 7px;
-    font-size: 12px;
+    height: 26px;
   }
   .sidebar nav {
     flex-direction: row;
@@ -1924,6 +1911,11 @@ a{color:var(--blue)}a:hover{color:var(--accent)}a:focus-visible{outline:2px soli
   color: var(--warning);
 }
 .sig {
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2036,6 +2028,23 @@ a{color:var(--blue)}a:hover{color:var(--accent)}a:focus-visible{outline:2px soli
   }
 }
 
+/* v1.2: grouped system rows */
+.system-toggle {
+  margin: 10px 17px 0;
+  font-size: 12px;
+}
+
+/* v1.2: real executable icons */
+.app-avatar.has-icon {
+  background: transparent;
+  border-color: transparent;
+}
+.app-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 /* v1.1: onboarding */
 dialog.onboarding {
   width: min(560px, calc(100vw - 32px));
@@ -2079,5 +2088,43 @@ dialog.onboarding {
 }
 .risk-info {
   background: #1d2d44;
+  color: var(--blue);
+}
+
+/* v1.2: about, what's new */
+.about-version {
+  display: grid;
+  gap: 3px;
+}
+.about-version strong {
+  font-size: 15px;
+}
+.about-version small {
+  color: var(--muted);
+}
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 4px 0 0;
+}
+.about-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--blue);
+}
+.whats-new {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid #2b4a66;
+  background: #12263a;
+  border-radius: var(--radius);
+}
+.whats-new a {
   color: var(--blue);
 }

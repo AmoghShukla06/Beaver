@@ -9,9 +9,11 @@ const {
   dialog,
   session,
   shell,
+  clipboard,
 } = require("electron");
 const path = require("node:path");
 const os = require("node:os");
+const fsSync = require("node:fs");
 const fs = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
 const { Backend } = require("./backend.cjs");
@@ -32,6 +34,11 @@ let win = null,
   updater = null,
   expected = "";
 const queued = [];
+let update = { state: "disabled" }; // shown in Settings → About
+let whatsNew = null; // { from, to } after an update, until dismissed
+let logFile = null;
+const iconCache = new Map(); // executable path -> Promise<NativeImage | null>
+let knownPaths = new Set(); // only paths the service reported may be read for icons
 const live = new Set(); // Notifications are garbage-collected (and lose click handlers) unless referenced.
 const icons = {};
 const methods = [
@@ -71,7 +78,46 @@ else {
   });
 }
 
+// Local app log: about 2 MB max (one rotation). Errors and lifecycle only, never connection data.
+function log(message) {
+  if (!logFile) return;
+  try {
+    if (fsSync.existsSync(logFile) && fsSync.statSync(logFile).size > 1_000_000)
+      fsSync.renameSync(logFile, logFile + ".1");
+    fsSync.appendFileSync(logFile, new Date().toISOString() + " " + message + "\n");
+  } catch {
+    /* logging must never break monitoring */
+  }
+}
+
+function dataDir() {
+  return process.env.BEAVER_TEST_DATA && !app.isPackaged
+    ? process.env.BEAVER_TEST_DATA
+    : path.join(app.getPath("userData"), "data");
+}
+
+function logsDir() {
+  return path.join(dataDir(), "logs");
+}
+
+function trackVersion() {
+  const marker = path.join(app.getPath("userData"), "last-version");
+  let previous = "";
+  try {
+    previous = fsSync.readFileSync(marker, "utf8").trim();
+  } catch {}
+  if (previous && previous !== app.getVersion())
+    whatsNew = { from: previous, to: app.getVersion() };
+  try {
+    fsSync.writeFileSync(marker, app.getVersion());
+  } catch {}
+}
+
 async function start() {
+  fsSync.mkdirSync(logsDir(), { recursive: true });
+  logFile = path.join(logsDir(), "app.log");
+  log(`Beaver ${app.getVersion()} starting (${process.platform} ${os.release()}, Electron ${process.versions.electron})`);
+  if (app.isPackaged) trackVersion();
   const preview =
     !app.isPackaged && process.env.BEAVER_DEV_URL === "http://127.0.0.1:5173";
   expected = preview
@@ -114,9 +160,24 @@ function startUpdater() {
   updater.logger = null;
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = true;
-  updater.on("error", () => {}); // offline or no release metadata: try again later
+  update = { state: "idle" };
+  const set = (value) => {
+    update = { ...update, ...value };
+    win?.webContents.send("beaver:update", update);
+  };
+  updater.on("checking-for-update", () => set({ state: "checking", error: null }));
+  updater.on("update-not-available", () => set({ state: "latest", checked_at: Date.now() / 1000 }));
+  updater.on("update-available", (info) => set({ state: "downloading", version: info.version, percent: 0 }));
+  updater.on("download-progress", (p) => set({ state: "downloading", percent: Math.round(p.percent) }));
+  updater.on("error", (error) => {
+    // Offline or no release metadata: try again at the next check.
+    log("update check failed: " + String(error?.message || error).slice(0, 300));
+    set({ state: "error", error: "Could not reach GitHub Releases", checked_at: Date.now() / 1000 });
+  });
   updater.on("update-downloaded", (info) => {
     updateReady = info.version;
+    set({ state: "ready", version: info.version });
+    log("update downloaded: " + info.version);
     refreshTray();
     toast({
       title: `Beaver ${info.version} is ready`,
@@ -139,21 +200,18 @@ function installUpdate() {
 }
 
 function startBackend() {
-  const dataDir =
-    process.env.BEAVER_TEST_DATA && !app.isPackaged
-      ? process.env.BEAVER_TEST_DATA
-      : path.join(app.getPath("userData"), "data");
   backend = new Backend({
-    directory: dataDir,
+    directory: dataDir(),
     packaged: app.isPackaged,
     resources: process.resourcesPath,
     onEvent,
+    log,
     onExit: () => {
       if (quitting) return;
       // Monitoring must survive a crashed service, but never spin: at most 5 restarts in 10 minutes.
       const now = Date.now();
       restarts = restarts.filter((t) => now - t < 600000);
-      if (restarts.length >= 5) return;
+      if (restarts.length >= 5) return log("service restart limit reached");
       restarts.push(now);
       setTimeout(() => {
         if (!quitting) startBackend();
@@ -260,10 +318,21 @@ function registerIpc() {
         settings = result;
         refreshTray();
       }
-      if (method === "snapshot") settings = result.settings;
+      if (method === "snapshot") {
+        settings = result.settings;
+        knownPaths = new Set(
+          [...result.apps, ...result.alerts].map((a) => a.path).filter(Boolean),
+        );
+      }
       return result;
     });
   }
+  ipcMain.handle("beaver:icon", async (event, params) => {
+    trusted(event);
+    if (typeof params?.path !== "string" || !knownPaths.has(params.path)) return null;
+    const image = await appIcon(params.path);
+    return image ? image.toDataURL() : null;
+  });
   ipcMain.handle("beaver:pick_geoip", async (event) => {
     trusted(event);
     const selected = await dialog.showOpenDialog(win, {
@@ -314,6 +383,50 @@ function registerIpc() {
     );
     return { exported: items.length };
   });
+  ipcMain.handle("beaver:app_info", (event) => {
+    trusted(event);
+    return {
+      version: app.getVersion(),
+      electron: process.versions.electron,
+      packaged: app.isPackaged,
+      update: settings.auto_update === false && update.state !== "ready" ? { ...update, state: "off" } : update,
+      whats_new: whatsNew,
+    };
+  });
+  ipcMain.handle("beaver:check_updates", async (event) => {
+    trusted(event);
+    if (!updater) throw new Error("Updates are available in installed builds.");
+    await updater.checkForUpdates();
+    return update;
+  });
+  ipcMain.handle("beaver:restart_update", (event) => {
+    trusted(event);
+    if (!updateReady) throw new Error("No update is ready yet.");
+    installUpdate();
+    return { ok: true };
+  });
+  ipcMain.handle("beaver:dismiss_whats_new", (event) => {
+    trusted(event);
+    whatsNew = null;
+    return { ok: true };
+  });
+  ipcMain.handle("beaver:open_logs", async (event) => {
+    trusted(event);
+    const error = await shell.openPath(logsDir());
+    if (error) throw new Error(error);
+    return { ok: true };
+  });
+  ipcMain.handle("beaver:copy_text", (event, params) => {
+    trusted(event);
+    if (typeof params?.text !== "string" || params.text.length > 20000) throw new Error("Invalid text");
+    clipboard.writeText(params.text);
+    return { copied: true };
+  });
+  ipcMain.handle("beaver:copy_diagnostics", async (event) => {
+    trusted(event);
+    clipboard.writeText(await diagnostics());
+    return { copied: true };
+  });
   ipcMain.handle("beaver:test_notification", (event) => {
     trusted(event);
     toast({
@@ -325,6 +438,73 @@ function registerIpc() {
 }
 
 // ---- Notifications -------------------------------------------------------------------------------------
+
+// Support report for GitHub issues. Usernames, IP addresses and paths are redacted.
+async function diagnostics() {
+  const redact = (text) =>
+    String(text)
+      .replace(/([A-Za-z]:(?:\\\\|\\)Users(?:\\\\|\\))[^\\\s"]+/gi, "$1<user>")
+      .replace(/(\/home\/)[^/\s"]+/g, "$1<user>")
+      .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, "<ip>")
+      .replace(/\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b|(?:\b[0-9a-f]{1,4})?(?::[0-9a-f]{1,4})*::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?/gi, "<ip>");
+  const tail = (file) => {
+    try {
+      return fsSync.readFileSync(file, "utf8").trim().split("\n").slice(-40).join("\n");
+    } catch {
+      return "(none)";
+    }
+  };
+  let snapshot = null;
+  try {
+    snapshot = await backend.call("snapshot");
+  } catch (error) {
+    snapshot = { error: error.message };
+  }
+  const c = snapshot.coverage || {};
+  const report = {
+    beaver: app.getVersion(),
+    electron: process.versions.electron,
+    os: `${process.platform} ${os.release()} ${process.arch}`,
+    packaged: app.isPackaged,
+    update,
+    settings: snapshot.settings && Object.fromEntries(Object.entries(snapshot.settings).filter(([k]) => k !== "geoip_path")),
+    coverage: c.platform && {
+      elevated: c.elevated,
+      inventory_error: c.inventory_error,
+      capture: { available: c.capture.available, active: c.capture.active, error: c.capture.error, interfaces: c.capture.interfaces },
+      feeds: c.intel.feeds.map((f) => `${f.id}: ${f.enabled ? (f.fresh ? "current" : "stale") : "off"}${f.error ? " (" + f.error + ")" : ""}`),
+      dns_cache: c.dns_cache,
+      geo: c.geo?.available,
+      power: c.power,
+    },
+    counts: snapshot.apps && {
+      apps: snapshot.apps.length,
+      connections: snapshot.connections.length,
+      alerts: snapshot.alerts.length,
+      rules: snapshot.rules.length,
+    },
+    error: snapshot.error,
+  };
+  return redact(
+    "## Beaver diagnostics\n```json\n" + JSON.stringify(report, null, 2) + "\n```\n" +
+      "### app.log\n```\n" + tail(path.join(logsDir(), "app.log")) + "\n```\n" +
+      "### service.log\n```\n" + tail(path.join(logsDir(), "service.log")) + "\n```\n",
+  );
+}
+
+function appIcon(file) {
+  if (!iconCache.has(file)) {
+    if (iconCache.size > 500) iconCache.clear();
+    iconCache.set(
+      file,
+      app
+        .getFileIcon(file, { size: "normal" })
+        .then((image) => (image.isEmpty() ? null : image))
+        .catch(() => null),
+    );
+  }
+  return iconCache.get(file);
+}
 
 function onEvent(event, data) {
   if (event === "status") {
@@ -354,7 +534,7 @@ function onEvent(event, data) {
   toastTimer = setTimeout(flushAlerts, wait);
 }
 
-function flushAlerts() {
+async function flushAlerts() {
   const batch = queued.splice(0);
   if (!batch.length) return;
   lastToast = Date.now();
@@ -409,6 +589,7 @@ function flushAlerts() {
     critical: alert.level === "High" || Boolean(remote),
     target,
     actions: actions.filter(Boolean),
+    icon: alert.path ? await appIcon(alert.path) : null,
   });
 }
 
@@ -426,13 +607,13 @@ function act(alert, method, params, done) {
     );
 }
 
-function toast({ title, body, critical = false, target, actions = [] }) {
+function toast({ title, body, critical = false, target, actions = [], icon = null }) {
   if (!Notification.isSupported())
     throw new Error("Native notifications are unavailable in this desktop session.");
   const notification = new Notification({
     title,
     body: body.slice(0, 250),
-    icon: asset("beaver.png"),
+    icon: icon || asset("beaver.png"),
     urgency: critical ? "critical" : "normal",
     timeoutType: critical ? "never" : "default",
     actions: actions.map((a) => ({ type: "button", text: a.label })),

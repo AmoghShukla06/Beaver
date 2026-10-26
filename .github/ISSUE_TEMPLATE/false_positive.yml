@@ -1,0 +1,30 @@
+name: False positive
+description: Beaver flagged something you believe is safe
+labels: [false-positive, detection]
+body:
+  - type: input
+    id: app
+    attributes:
+      label: Application
+      description: Name and publisher shown in Beaver (e.g. "Steam.exe, Valve Corp.")
+    validations:
+      required: true
+  - type: input
+    id: rule
+    attributes:
+      label: Rule
+      description: The evidence title or rule shown in the alert (e.g. "Contacts a server on a fixed schedule")
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why do you think it's safe?
+      description: What the app is doing legitimately. Don't paste full connection lists or private IPs.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Beaver version and OS
+      placeholder: 1.2.0 on Windows 11

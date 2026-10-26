@@ -1,10 +1,24 @@
-"""Deterministic code-native shield icons; no runtime image dependency. Run: python scripts/create-icons.py"""
+"""Deterministic code-native brand icons (shield with beaver teeth); no runtime image dependency.
+Run: python scripts/create-icons.py. Geometry matches the Brand SVG in src/components.tsx (64x64 units)."""
 import struct, zlib
 from pathlib import Path
 
-SHIELD = [(.5, .06), (.88, .2), (.85, .56), (.73, .76), (.5, .94), (.27, .76), (.15, .56), (.12, .2)]
-CHECK = [(.29, .47), (.37, .4), (.46, .51), (.65, .3), (.73, .38), (.46, .67)]
-MINT, INK, ROSE = (98, 223, 172), (11, 16, 24), (255, 99, 120)
+def quad(p0, p1, p2, steps=12):
+    return [((1-t)**2*p0[0]+2*(1-t)*t*p1[0]+t*t*p2[0], (1-t)**2*p0[1]+2*(1-t)*t*p1[1]+t*t*p2[1])
+            for t in (i/steps for i in range(1, steps+1))]
+
+def scale(points):
+    return [(x/64, y/64) for x, y in points]
+
+# Shield: M32 5 L55 13 L53 35 Q49 50 32 59 Q15 50 11 35 L9 13 Z
+SHIELD = scale([(32, 5), (55, 13), (53, 35)] + quad((53, 35), (49, 50), (32, 59)) + quad((32, 59), (15, 50), (11, 35)) + [(9, 13)])
+# Upper lip: M17 25 Q32 16 47 25 L47 30 Q32 22 17 30 Z
+LIP = scale([(17, 25)] + quad((17, 25), (32, 16), (47, 25)) + [(47, 30)] + quad((47, 30), (32, 22), (17, 30)))
+def tooth(x0, x1, y0=26, y1=45, r=2.5):
+    bottom = quad((x1, y1-r), (x1, y1), (x1-r, y1), 4) + quad((x0+r, y1), (x0, y1), (x0, y1-r), 4)
+    return scale([(x0, y0), (x1, y0)] + bottom)
+TEETH = [tooth(23.5, 31, 26, 42), tooth(33, 40.5, 26, 42)]
+MINT, INK, CREAM, ROSE = (98, 223, 172), (11, 16, 24), (245, 240, 225), (255, 99, 120)
 
 def inside(x, y, poly):
     result = False; j = len(poly) - 1
@@ -15,8 +29,18 @@ def inside(x, y, poly):
         j = i
     return result
 
+def color_at(x, y, badge):
+    if badge and (x - .76) ** 2 + (y - .76) ** 2 < .23 ** 2:
+        return INK if (x - .76) ** 2 + (y - .76) ** 2 > .19 ** 2 else ROSE
+    if not inside(x, y, SHIELD):
+        return None
+    if inside(x, y, LIP):
+        return INK
+    if any(inside(x, y, t) for t in TEETH):
+        return CREAM
+    return MINT
+
 def render(size, badge=False, ss=3):
-    """RGBA rows, supersampled ss×ss for anti-aliased edges."""
     rows = []
     for py in range(size):
         row = bytearray()
@@ -24,23 +48,16 @@ def render(size, badge=False, ss=3):
             acc = [0, 0, 0, 0]
             for sy in range(ss):
                 for sx in range(ss):
-                    x = (px + (sx + .5) / ss) / size; y = (py + (sy + .5) / ss) / size
-                    color = None
-                    if badge and (x - .76) ** 2 + (y - .76) ** 2 < .23 ** 2:
-                        color = INK if (x - .76) ** 2 + (y - .76) ** 2 > .19 ** 2 else ROSE
-                    elif inside(x, y, SHIELD):
-                        color = INK if inside(x, y, CHECK) else MINT
-                    if color:
-                        acc[0] += color[0]; acc[1] += color[1]; acc[2] += color[2]; acc[3] += 255
-            n = ss * ss; alpha = acc[3] / n
-            row.extend((round(acc[0] / (acc[3] / 255)) if acc[3] else 0, round(acc[1] / (acc[3] / 255)) if acc[3] else 0,
-                        round(acc[2] / (acc[3] / 255)) if acc[3] else 0, round(alpha)))
+                    c = color_at((px + (sx + .5) / ss) / size, (py + (sy + .5) / ss) / size, badge)
+                    if c:
+                        acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2]; acc[3] += 255
+            n = acc[3] / 255
+            row.extend((round(acc[0] / n) if n else 0, round(acc[1] / n) if n else 0, round(acc[2] / n) if n else 0, round(acc[3] / (ss * ss))))
         rows.append(bytes(row))
     return rows
 
 def png(size, badge=False):
-    rows = render(size, badge)
-    raw = b"".join(b"\0" + r for r in rows)
+    raw = b"".join(b"\0" + r for r in render(size, badge))
     chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
 

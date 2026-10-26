@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/AmoghShukla06/Beaver/security/advisories/new
+    about: Please report vulnerabilities privately, not in public issues.
+  - name: How detection works
+    url: https://github.com/AmoghShukla06/Beaver/blob/main/docs/DETECTION.md
+    about: Rules, points and false-positive notes for every detection.

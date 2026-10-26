@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.0
+
+### Polish
+- Real application icons in the app list, investigations and notifications.
+- New brand mark (shield with beaver teeth) across the app icon, tray and sidebar.
+- Much shorter UI copy; caveats moved to docs. No "Settings saved" toasts; actions report their own result ("Session ended…").
+- System, idle and ownerless sockets are grouped in one collapsible row. Score chips only appear at Medium and above.
+- Relative times ("3 min ago") throughout.
+- The sidebar shows the real version.
+
+### Reliability and support
+- Local rotating logs for the service and the app (errors and lifecycle only), plus *Open logs*.
+- Settings → About: version, update status, *Check for updates* / *Restart to update*, *Copy diagnostics* (usernames and IPs redacted), release notes, licenses and issue links.
+- "What's new" banner after an update.
+- Windows uninstaller offers to remove Beaver's firewall rules (never during auto-update).
+- Linux: firewall rules applied before the last reboot are shown as inactive with *Re-apply*, since nftables runtime rules do not survive a restart.
+
+### Fixes
+- Dialog backdrops rendered mirrored under software compositing; the blur has been removed.
+
 ## 1.1.0
 
 ### New

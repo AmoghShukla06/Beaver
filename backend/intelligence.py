@@ -4,6 +4,7 @@ import bisect
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import threading
 import time
@@ -133,6 +134,7 @@ class Intelligence:
                     self.fetch(feed)
                 except Exception as exc:
                     self.errors[feed["id"]] = str(exc)[:300]
+                    logging.getLogger("beaver").warning("Feed %s failed: %s", feed["id"], exc)
             if not only_due and self.errors and len(self.errors) == len(FEEDS) - len(self.disabled):
                 raise ValueError("No threat feed could be refreshed: " + next(iter(self.errors.values())))
         finally:

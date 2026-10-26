@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Copy, Download, ExternalLink, OctagonX, Shield, X } from "lucide-react";
 import { bytes, desktop, request, when } from "./api";
 import {
+  AppIcon,
   Empty,
   EvidenceItem,
   Panel,
@@ -79,7 +80,7 @@ export default function Investigation({
         </button>
       </div>
       <div className="investigation-title">
-        <span className="app-avatar large">{app.name[0]?.toUpperCase()}</span>
+        <AppIcon name={app.name} path={app.path} large />
         <div>
           <h2>{app.name}</h2>
           <RiskBadge level={app.risk.level} />
@@ -123,6 +124,7 @@ export default function Investigation({
                 app.pids.join(", ") +
                 "). Unsaved work in this program is lost and its network connections close. Core Windows processes are refused.",
               label: "End process",
+              done: app.name + " was stopped.",
               run: () => request("terminate", { app_id: app.id }),
             })
           }
@@ -201,7 +203,7 @@ export default function Investigation({
                   <button
                     className="icon-button"
                     aria-label="Copy SHA-256"
-                    onClick={() => void navigator.clipboard?.writeText(app.binary!.sha256!)}
+                    onClick={() => void request("copy_text", { text: app.binary!.sha256! })}
                   >
                     <Copy size={14} />
                   </button>
@@ -298,11 +300,7 @@ export default function Investigation({
           </>
         )}
       </Panel>
-      <p className="muted small">
-        PIDs: {app.pids.join(", ") || "Unavailable"}. Byte totals are captured
-        IP-layer traffic during this session. DNS names are observed answers,
-        not verified endpoint identities.
-      </p>
+      <p className="muted small">PID {app.pids.join(", ") || "unavailable"}</p>
     </aside>
   );
 }

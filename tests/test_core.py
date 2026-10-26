@@ -310,6 +310,17 @@ def test_firewall_apply_remove_only_own_id(store):
     with pytest.raises(ValueError): fw.remove("foreign-rule")
     fw.remove(rule["id"]); assert not store.rules()
 
+def test_linux_rules_from_before_reboot_are_inactive_and_reapply(store):
+    calls=[]
+    runner=lambda args,**kw: calls.append(args) or subprocess.CompletedProcess(args,0,"","")
+    fw=Firewall(store,runner,boot_time=lambda: 0); fw.system="Linux"
+    with patch("shutil.which",return_value="/usr/sbin/nft"), patch("os.geteuid",create=True,return_value=0):
+        assert fw.apply("endpoint","1.1.1.1")["state"]=="applied"
+        booted=time.time()+0.001; fw.boot_time=lambda: booted  # machine restarted after the rule was applied
+        assert fw.rules()[0]["state"]=="inactive"
+        time.sleep(0.01)
+        assert fw.apply("endpoint","1.1.1.1")["state"]=="applied" and len(calls)==2 and fw.rules()[0]["state"]=="applied"
+
 def test_verify_marks_missing_rules(store):
     calls=[]
     def runner(args,**kwargs):

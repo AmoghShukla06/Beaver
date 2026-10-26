@@ -80,8 +80,10 @@ def linux_script(kind,target,remove=False):
         f"add rule inet {table} input {family} saddr {addr} drop\n")
 
 class Firewall:
-    def __init__(self,store,runner=subprocess.run):
+    def __init__(self,store,runner=subprocess.run,boot_time=None):
         self.store=store; self.runner=runner; self.system=platform.system()
+        import psutil
+        self.boot_time=boot_time or psutil.boot_time
 
     def capabilities(self):
         return {"platform":self.system,"endpoint":self.system=="Windows" or (self.system=="Linux" and bool(shutil.which("nft"))),
@@ -109,6 +111,14 @@ class Firewall:
             raise FirewallError("Unsupported operating system")
         if result.returncode:
             raise FirewallError("The operating system did not apply the rule. Authorization may have been cancelled. "+str(result.stderr or "")[-500:])
+
+    def rules(self):
+        """Recorded rules with live state. nftables rules added at runtime do not survive a reboot."""
+        rules=self.store.rules()
+        if self.system=="Linux":
+            booted=self.boot_time()
+            rules=[r|{"state":"inactive"} if r["state"]=="applied" and (r.get("verified_at") or 0)<booted else r for r in rules]
+        return rules
 
     def present(self):
         """Names of Beaver rules currently in the OS firewall, or None when they cannot be read unprivileged."""
@@ -145,7 +155,7 @@ class Firewall:
 
     def apply(self,kind,target):
         target=validate(kind,target,self.system); rid=rule_id(kind,target)
-        existing=next((r for r in self.store.rules() if r["id"]==rid),None)
+        existing=next((r for r in self.rules() if r["id"]==rid),None)
         if existing and existing["state"]=="applied":
             return existing
         pending={"id":rid,"kind":kind,"target":target,"created":time.time(),"state":"pending","verified_at":None}

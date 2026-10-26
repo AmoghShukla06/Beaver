@@ -1,6 +1,7 @@
 """Real OS socket inventory sampled independently of the UI."""
 import collections
 import hashlib
+import logging
 import os
 import platform
 import socket
@@ -341,6 +342,8 @@ class Monitor:
             try:
                 self.sample()
             except Exception as exc:
+                if str(exc)[:300] != self.error:
+                    logging.getLogger("beaver").warning("Sample failed: %s", exc)  # once per distinct error
                 self.error = str(exc)[:300]
             self.stop_event.wait(max(.1, self.interval() - (time.monotonic() - start)))
 

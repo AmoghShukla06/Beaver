@@ -3,6 +3,7 @@ Results are cached per path+size+mtime, so each binary version is hashed and ver
 import base64
 import hashlib
 import json
+import logging
 import os
 import platform
 import queue
@@ -112,6 +113,7 @@ class Binaries:
                 self.inspect(batch)
             except Exception as exc:
                 self.error = str(exc)[:300]
+                logging.getLogger("beaver").warning("Executable inspection failed: %s", exc)
             with self.lock:
                 self.pending.difference_update(batch)
 

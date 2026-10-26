@@ -3,7 +3,7 @@ const { createInterface } = require("node:readline");
 const path = require("node:path");
 const fs = require("node:fs");
 class Backend {
-  constructor({ directory, resources, packaged = false, onEvent, onExit }) {
+  constructor({ directory, resources, packaged = false, onEvent, onExit, log }) {
     this.pending = new Map();
     this.sequence = 0;
     this.error = null;
@@ -33,7 +33,8 @@ class Backend {
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    this.child.stderr.on("data", () => {}); // Process metadata must not leak into console logs.
+    // Tracebacks go to the local log file only (never the console), so crashes can be diagnosed.
+    this.child.stderr.on("data", (chunk) => log?.("service stderr: " + String(chunk).slice(0, 4000)));
     createInterface({ input: this.child.stdout, crlfDelay: Infinity }).on(
       "line",
       (line) => {
@@ -58,6 +59,7 @@ class Backend {
     this.child.on("error", (err) => this.fail(err.message));
     this.child.on("exit", (code) => {
       this.fail("Telemetry service stopped. Beaver is restarting it.");
+      if (!this.closing) log?.("service exited with code " + code);
       onExit?.(code);
     });
     this.child.stdin.on("error", () =>

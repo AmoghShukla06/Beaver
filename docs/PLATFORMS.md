@@ -7,7 +7,7 @@ Windows 10/11 x64, standard user account.
 - **Packet capture:** install [Npcap](https://npcap.com/) (keep "WinPcap API-compatible mode" unchecked; the default is fine). It enables per-app speeds and domain names from DNS answers. If Npcap was installed with "restrict to administrators", capture reports an access error. Npcap is licensed separately and is not bundled.
 - **Signatures:** Authenticode status and publisher are read with `Get-AuthenticodeSignature`, which includes catalog-signed system files. One batched PowerShell process runs per group of newly seen executables, and results are cached.
 - **DNS cache:** Beaver reads the DNS client cache with cache-only queries. Recent Windows 11 builds restrict this to administrators, in which case domains come from capture only.
-- **Firewall:** each change triggers UAC. Cancelling is never reported as success. Rules outlive the app; remove them in Beaver before uninstalling, or find group `Beaver` in Windows Defender Firewall.
+- **Firewall:** each change triggers UAC. Cancelling is never reported as success. Rules outlive the app; the uninstaller offers to remove them (group `Beaver` in Windows Defender Firewall).
 - **Notifications:** Focus Assist / Do Not Disturb can hide them. Use *Send test notification* in Settings. Installed builds register the `org.beaver.security` AppUserModelID through the Start-menu shortcut.
 - **Start at login** uses the standard Run-key login item with `--hidden`.
 
@@ -28,7 +28,7 @@ sudo dnf install libpcap nftables polkit                # Fedora
   ```
   Do not grant capabilities to a general-purpose Python interpreter, run Electron as root, or use `--no-sandbox`.
 - **Firewall:** endpoint and inbound-port rules use nftables through `pkexec`, so a polkit agent must be running. Executable-path blocking is not available in nftables. Beaver deliberately does not substitute UID-wide blocks.
-- **Rule verification** requires root, so on a normal desktop the recorded state reflects the last successful action.
+- **Rule verification** requires root, so on a normal desktop the recorded state reflects the last successful action. nftables rules added at runtime do not survive a reboot. Beaver marks rules applied before the last boot as *inactive* and offers *Re-apply*.
 - **Fileless and deleted executables** are detected through `/proc/<pid>/exe`.
 - **Start at login** writes `~/.config/autostart/beaver.desktop`.
 
