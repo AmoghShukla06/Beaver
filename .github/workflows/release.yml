@@ -1,0 +1,88 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build and publish, e.g. v1.0.0
+        required: true
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ubuntu 22.04 keeps the bundled service compatible with older glibc (Debian 12, Ubuntu 22.04+).
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
+          $PY -m pip install --upgrade pip
+          $PY -m pip install -r requirements.lock
+      - run: npm ci
+      - run: npm test
+      - name: Package
+        run: npm run package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beaver-${{ runner.os }}
+          path: |
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Release notes
+        run: |
+          awk '/^## /{n++} n==1' CHANGELOG.md > notes.md
+          cat >> notes.md <<'EOF'
+
+          ## Downloads
+          | Platform | File |
+          |---|---|
+          | Windows 10/11 x64 | `Beaver-Setup-*.exe` |
+          | Debian / Ubuntu x64 | `beaver-security_*_amd64.deb` |
+          | Any Linux x64 | `Beaver-*.AppImage` |
+
+          Builds are not code-signed yet; Windows SmartScreen may warn ("More info → Run anyway"). Verify files with `SHA256SUMS.txt`.
+          Optional: [Npcap](https://npcap.com/) on Windows or `libpcap` on Linux for per-app speeds and DNS domains.
+          EOF
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Beaver ${{ inputs.tag || github.ref_name }}
+          body_path: notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

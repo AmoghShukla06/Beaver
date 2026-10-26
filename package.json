@@ -1,0 +1,149 @@
+{
+  "name": "beaver-security",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Open-source network security monitor for Windows and Linux: live connections, threat intelligence, remote-access and data-theft detection, native firewall control.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Amogh Shukla",
+    "email": "169269488+AmoghShukla06@users.noreply.github.com",
+    "url": "https://github.com/AmoghShukla06"
+  },
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "desktop": "node scripts/dev.cjs",
+    "build": "tsc -b && vite build",
+    "start": "electron .",
+    "typecheck": "tsc -b",
+    "test": "node scripts/test-backend.cjs",
+    "test:desktop": "node scripts/test-desktop.cjs",
+    "backend:build": "node scripts/build-backend.cjs",
+    "package": "npm run build && npm run backend:build && electron-builder --publish never",
+    "package:dir": "npm run build && npm run backend:build && electron-builder --dir --publish never",
+    "format": "prettier --write src desktop scripts vite.config.ts",
+    "test:browser": "node scripts/test-browser.cjs",
+    "icons": "python scripts/create-icons.py"
+  },
+  "dependencies": {
+    "d3-geo": "^3.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.0",
+    "@types/d3-geo": "^3.1.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/topojson-client": "^3.1.5",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.0",
+    "playwright": "^1.55.0",
+    "prettier": "^3.6.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  },
+  "build": {
+    "appId": "org.beaver.security",
+    "productName": "Beaver",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-dist",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/beaver.ico",
+      "artifactName": "Beaver-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Beaver"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Network",
+      "icon": "assets/beaver.png",
+      "executableName": "beaver-security",
+      "synopsis": "Network security monitor",
+      "maintainer": "Amogh Shukla <169269488+AmoghShukla06@users.noreply.github.com>",
+      "artifactName": "Beaver-${version}.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "Beaver",
+          "Comment": "Network security monitor",
+          "Keywords": "network;security;firewall;monitor;"
+        }
+      }
+    },
+    "copyright": "Copyright © 2026 Amogh Shukla and Beaver contributors",
+    "deb": {
+      "artifactName": "beaver-security_${version}_amd64.${ext}",
+      "recommends": [
+        "libpcap0.8",
+        "nftables",
+        "policykit-1",
+        "libcap2-bin"
+      ]
+    },
+    "publish": null
+  },
+  "homepage": "https://github.com/AmoghShukla06/Beaver",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AmoghShukla06/Beaver.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AmoghShukla06/Beaver/issues"
+  },
+  "keywords": [
+    "network-monitor",
+    "security",
+    "firewall",
+    "threat-intelligence",
+    "electron",
+    "windows",
+    "linux",
+    "remote-access",
+    "infostealer"
+  ]
+}

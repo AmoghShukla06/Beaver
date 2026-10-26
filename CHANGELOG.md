@@ -1,0 +1,34 @@
+# Changelog
+
+## 1.0.0
+
+### Detection
+- Six local threat feeds (Feodo C2, Spamhaus DROP v4/v6, HaGeZi threat domains, Emerging Threats, IPsum) totalling 225k+ indicators, with CIDR and domain-suffix matching, per-feed freshness and toggles.
+- Remote access and data-theft shield: 40+ remote-control tools, internet logins to RDP/VNC/SSH/WinRM/SMB, exposed remote-login services, reverse shells, netcat-style tools, Telegram-bot and file-sharing exfiltration, lopsided uploads.
+- Identity checks: Authenticode status and publisher, tampered or untrusted signatures, process masquerading, staging-folder executables, Linux fileless, deleted and `/dev/shm` executables.
+- Behavior: living-off-the-land binaries, document-spawned tools, C2 beaconing, RAT and Tor ports, port and endpoint fan-out. MITRE ATT&CK mapping for every rule.
+- Inbound scanner hits are discounted; a valid publisher signature reduces behavioral points only.
+
+### Response
+- End session / End process with PID and start-time verification and protected-process refusal.
+- Remote access lockdown: one inbound firewall rule for Telnet, RDP, VNC, TeamViewer direct and WinRM ports.
+- Opt-in Active protection that stops unsigned programs showing confirmed High-risk behavior.
+- Firewall rule verification against the OS; missing rules can be re-applied.
+
+### Notifications and tray
+- Push-based alerts (no polling), burst coalescing, remote-access alerts always on, optional Medium notifications, pause for 1 hour from the tray, click-through to the exact investigation, persistent critical toasts, alert tray icon and taskbar badge.
+- Alerts deduplicate by evidence for 12 hours and escalate when new evidence appears. Acknowledge all.
+- Start at login (Windows login item, Linux XDG autostart) in tray-only mode.
+- Automatic restart of the monitoring service if it crashes (bounded).
+
+### Performance
+- Monitoring service idle CPU reduced from 7.8% to about 1% of one core; per-sample cost from 165 ms to 24 ms (10 ms without a window).
+- Closing to tray unloads the renderer; GPU acceleration is disabled. Tray-mode memory is about 280 MB, down from about 650 MB.
+- Scapy replaced by a native libpcap/Npcap binding (25× faster start, about 5 MB overhead); geoip2 replaced by maxminddb. The Python bundle and dependency tree are much smaller.
+- Incremental SQLite writes, below-normal process priority, slow RPCs off the request loop.
+
+### UI
+- New Remote shield and Connections pages, risk distribution strip, sortable application table with scores and signature badges, executable panel (publisher, SHA-256, VirusTotal lookup, parent process, first seen), evidence with ATT&CK links, alert filters and responses, feed list, new settings.
+
+### Licensing
+- Removed the GPL-2.0 Scapy dependency from the Apache-2.0 distribution.
