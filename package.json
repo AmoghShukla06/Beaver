@@ -17,7 +17,7 @@
     "tauri:dev": "node scripts/msvc.cjs npx tauri dev",
     "tauri:debug": "node scripts/msvc.cjs npx tauri build --debug --no-bundle",
     "tauri:build": "node scripts/msvc.cjs npx tauri build",
-    "test:service": "node scripts/msvc.cjs cargo test --workspace",
+    "test:service": "node scripts/stage-service.cjs && node scripts/msvc.cjs cargo test --workspace",
     "test:app": "node scripts/test-tauri.cjs",
     "test": "npm run test:service && npm run tauri:debug && npm run test:app",
     "format": "prettier --write src scripts vite.config.ts"
