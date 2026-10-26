@@ -1,0 +1,10 @@
+[workspace]
+members = ["service", "src-tauri"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "unwind"

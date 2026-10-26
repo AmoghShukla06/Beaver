@@ -63,7 +63,6 @@ async function render(html, width, height, file) {
 app.whenReady().then(async () => {
   const dir = path.join(__dirname, "..", "packaging");
   await render(sidebar("Network security for Windows and Linux. See every connection, stop remote access and data theft."), 164, 314, path.join(dir, "installer-sidebar.bmp"));
-  await render(sidebar("Thanks for using Beaver. You can choose what to keep before it is removed."), 164, 314, path.join(dir, "uninstaller-sidebar.bmp"));
   await render(header, 150, 57, path.join(dir, "installer-header.bmp"));
   app.quit();
 });

@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.0.0
+
+Beaver is now written in Rust. The Electron shell and the Python service are gone; the React UI is unchanged and runs in the system WebView through Tauri.
+
+### Lighter in the background
+- **Monitoring service rewritten in Rust**: about half the CPU of the Python service (0.55% vs 1.17% of one core at idle) and 18 MB instead of 43 MB of memory. A sample costs about 8 ms. One 5.7 MB binary replaces a 24 MB Python bundle.
+- **Tray mode uses about 65 MB in total** instead of about 280 MB with Electron. Closing the window still unloads the UI completely.
+- Process identity is checked with one cheap call per PID; the full process refresh runs only for new processes.
+
+### Same app, same data
+- Same detection rules, scores, alerts, settings, history database, threat-feed caches and firewall rule names. Upgrading keeps everything.
+- The Windows installer removes Beaver 1.x automatically and keeps its history, settings and firewall rules.
+- Notifications keep their action buttons (*End session*, *Block*, *Mark reviewed*) as native Windows toasts.
+- Automatic updates now verify the installer's SHA-256 against the release's `SHA256SUMS.txt` before running it.
+
+### Installer
+- Same branded wizard on Tauri's installer: welcome, license, *Startup and protection*, finish. The uninstaller asks whether to remove Beaver's firewall rules and whether to delete your data.
+- The Debian package is now named `beaver` and replaces `beaver-security`.
+
+### For contributors
+- Build with Rust stable and Node 22+: `npm run tauri:debug`, `npm run tauri:build`. Tests: `npm run test:service` (Rust) and `npm run test:app` (end-to-end against the real app over the WebView2 DevTools protocol).
+- The Linux nftables test runs in a disposable user and network namespace: `sh scripts/test-linux-firewall.sh`.
+
 ## 1.3.0
 
 ### Installer

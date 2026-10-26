@@ -1,6 +1,6 @@
 [package]
 name = "beaver-service"
-version = "1.4.0"
+version = "2.0.0"
 edition = "2021"
 description = "Beaver network monitoring service (sockets, threat intelligence, risk engine, firewall control)"
 license = "Apache-2.0"
@@ -25,10 +25,3 @@ windows-sys = { version = "0.61.2", features = ["Win32_NetworkManagement_Dns", "
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-strip = true
-panic = "unwind"

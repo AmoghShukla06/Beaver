@@ -1,3 +1,4 @@
+import "./bridge"; // must run before modules that read window.beaver
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

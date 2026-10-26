@@ -378,4 +378,31 @@ mod tests {
         drop(fw);
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    /// Real nftables block/unblock. Run ONLY in a disposable namespace: scripts/test-linux-firewall.sh.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore]
+    fn native_nft_blocks_and_unblocks() {
+        use std::net::{TcpListener, TcpStream};
+        use std::process::Command;
+        // Fail closed before any mutation unless we are in a different network namespace from the caller.
+        let host = std::env::var("BEAVER_HOST_NETNS").expect("run through scripts/test-linux-firewall.sh");
+        assert_ne!(std::fs::read_link("/proc/self/ns/net").unwrap().to_string_lossy(), host, "refusing to touch the host firewall");
+        let sh = |c: &str| assert!(Command::new("sh").args(["-c", c]).status().unwrap().success(), "{c}");
+        sh("ip link set lo up && ip addr add 192.0.2.1/32 dev lo && nft add table inet beaver_unrelated_test");
+        let server = TcpListener::bind("192.0.2.1:0").unwrap();
+        let addr = server.local_addr().unwrap();
+        let connects = || TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500)).is_ok();
+        let (store, dir) = temp();
+        let fw = Firewall::new(Arc::new(store));
+        assert!(connects(), "baseline connection failed");
+        let rule = fw.apply("endpoint", "192.0.2.1").unwrap();
+        assert!(!connects(), "nft rule did not block the endpoint");
+        fw.remove(rule["id"].as_str().unwrap()).unwrap();
+        assert!(connects(), "connection did not recover after removal");
+        sh("nft list table inet beaver_unrelated_test >/dev/null");
+        drop(fw);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

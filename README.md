@@ -40,8 +40,8 @@ It is built for people who want to know whether someone is remote-controlling th
 
 Beaver is designed to stay in the background permanently:
 
-- **~1% of one CPU core** for the monitoring service (under 0.15% of an 8-core machine). The service runs at below-normal priority, so it never competes with your work.
-- **About 280 MB total in the tray** (Electron about 233 MB working set plus a 47 MB service). Closing the window unloads the UI completely rather than hiding it, and GPU acceleration is off for this static UI.
+- **About 0.5% of one CPU core** for the Rust monitoring service at idle. The service runs at below-normal priority, so it never competes with your work.
+- **About 65 MB total in the tray** (shell plus an 18 MB service). Closing the window unloads the UI completely rather than hiding it, and GPU acceleration is off for this static UI.
 - **Push-based alerts**: the service pushes alerts to the tray process; nothing polls while the window is closed. A minimized window stops refreshing.
 - **Native packet capture** through libpcap/Npcap with a hand-written header parser: about 25× faster to start than a Scapy-based capture and about 5 MB of overhead. Only the first 128 bytes of a frame are copied, except DNS answers and TLS handshakes.
 - **Battery-aware**: with no window open on battery power, sampling slows from 2 s to 4 s.
@@ -55,9 +55,9 @@ Download from [Releases](https://github.com/AmoghShukla06/Beaver/releases/latest
 
 | Platform | File |
 |---|---|
-| Windows 10/11 x64 | `Beaver-Setup-<version>.exe` (installer) |
-| Linux x64 (Debian/Ubuntu) | `beaver-security_<version>_amd64.deb` |
-| Linux x64 (any distro) | `Beaver-<version>.AppImage` |
+| Windows 10/11 x64 | `Beaver_<version>_x64-setup.exe` (installer) |
+| Linux x64 (Debian/Ubuntu) | `Beaver_<version>_amd64.deb` |
+| Linux x64 (any distro) | `Beaver_<version>_amd64.AppImage` |
 
 Builds are not code-signed yet. Windows SmartScreen may show *"Windows protected your PC"*; choose *More info → Run anyway*. Verify downloads against `SHA256SUMS.txt` on the release page.
 
@@ -65,29 +65,26 @@ Builds are not code-signed yet. Windows SmartScreen may show *"Windows protected
 - **Windows:** install [Npcap](https://npcap.com/) for per-app speeds and domain names from DNS.
 - **Linux:** `sudo apt install libpcap0.8 nftables policykit-1`. For per-app speeds without root, see [Linux capture](docs/PLATFORMS.md#linux).
 
-On first launch a short setup asks about starting at sign-in, packet capture and notifications. From v1.1, the Windows installer and AppImage update themselves from GitHub Releases (Settings → *Install updates automatically*).
+On first launch a short setup asks about starting at sign-in, packet capture and notifications. On Windows, Beaver updates itself from GitHub Releases and verifies each installer's SHA-256 first (Settings → *Install updates automatically*); on Linux it tells you when a new release is out.
 
 ## Run from source
 
-Requirements: Node.js 22.12+ (24 recommended), Python 3.11–3.13.
+Requirements: [Rust](https://rustup.rs/) stable, Node.js 22.12+ (24 recommended), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) (Windows: Visual Studio C++ build tools and the Windows SDK; Linux: `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`).
 
 ```bash
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.lock   # Linux: .venv/bin/python
 npm ci
-npm run build
-npm start
+npm run tauri:dev
 ```
 
-Windows shortcut: `powershell -File scripts/setup.ps1`; Linux: `sh scripts/setup.sh`. Run as a normal user; never run Electron as root or disable its sandbox.
+Run as a normal user.
 
 | Command | Purpose |
 |---|---|
-| `npm run desktop` | Vite dev server + live Electron app |
-| `npm test` | Backend test suite (49 tests, including real socket discovery) |
-| `npm run test:desktop` | Real Electron end-to-end tests incl. accessibility scans, live feed download, capture and notifications |
+| `npm run tauri:dev` | Vite dev server + live app with hot reload |
+| `npm run test:service` | Rust tests for the service (rules, feeds, capture parser, firewall scripts, storage) and the shell |
+| `npm run tauri:debug` then `npm run test:app` | End-to-end tests against the real app: accessibility scans, live feed download, capture, notifications, close-to-tray |
 | `npm run typecheck` / `npm run build` | TypeScript checks and production UI |
-| `npm run package` | Build the bundled service and an installer for the current OS |
+| `npm run tauri:build` | Installer for the current OS (NSIS on Windows; .deb and AppImage on Linux) |
 
 ## How risk is decided
 

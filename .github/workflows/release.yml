@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to (re)build and publish, e.g. v1.0.0
+        description: Existing tag to (re)build and publish, e.g. v2.0.0
         required: true
 permissions:
   contents: read
@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Ubuntu 22.04 keeps the bundled service compatible with older glibc (Debian 12, Ubuntu 22.04+).
+        # Ubuntu 22.04 keeps the binaries compatible with older glibc (Debian 12, Ubuntu 22.04+).
         os: [windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
@@ -25,31 +25,21 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Python environment
-        shell: bash
-        run: |
-          python -m venv .venv
-          if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
-          $PY -m pip install --upgrade pip
-          $PY -m pip install -r requirements.lock
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
       - run: npm ci
-      - run: npm test
+      - run: npm run test:service
       - name: Package
-        run: npm run package
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run tauri:build
       - uses: actions/upload-artifact@v4
         with:
           name: beaver-${{ runner.os }}
           path: |
-            release/*.exe
-            release/*.AppImage
-            release/*.deb
-            release/*.blockmap
-            release/latest*.yml
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
   publish:
     needs: build
@@ -64,23 +54,24 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # The in-app updater downloads the -setup.exe and refuses it unless its hash matches this file.
       - name: Checksums
         run: cd dist && sha256sum *.exe *.AppImage *.deb > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Release notes
         run: |
           awk '/^## /{n++} n==1' CHANGELOG.md > notes.md
-          cat >> notes.md <<'EOF'
+          cat >> notes.md <<'NOTES'
 
           ## Downloads
           | Platform | File |
           |---|---|
-          | Windows 10/11 x64 | `Beaver-Setup-*.exe` |
-          | Debian / Ubuntu x64 | `beaver-security_*_amd64.deb` |
-          | Any Linux x64 | `Beaver-*.AppImage` |
+          | Windows 10/11 x64 | `Beaver_*_x64-setup.exe` |
+          | Debian / Ubuntu x64 | `Beaver_*_amd64.deb` |
+          | Any Linux x64 | `Beaver_*_amd64.AppImage` |
 
           Builds are not code-signed yet; Windows SmartScreen may warn ("More info → Run anyway"). Verify files with `SHA256SUMS.txt`.
           Optional: [Npcap](https://npcap.com/) on Windows or `libpcap` on Linux for per-app speeds and DNS domains.
-          EOF
+          NOTES
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}

@@ -229,7 +229,7 @@ export interface UpdateState {
 }
 export interface AppInfo {
   version: string;
-  electron: string;
+  runtime: string;
   packaged: boolean;
   update: UpdateState;
   whats_new: { from: string; to: string } | null;

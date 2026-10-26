@@ -22,21 +22,24 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Python environment
-        shell: bash
-        run: |
-          python -m venv .venv
-          if [ "$RUNNER_OS" = "Windows" ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
-          $PY -m pip install --upgrade pip
-          $PY -m pip install -r requirements.lock
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev nftables
       - run: npm ci
-      - run: npm test
       - run: npm run typecheck
       - run: npm run build
       - run: npm audit --audit-level=high --omit=dev
+      - name: Rust service and shell tests
+        run: npm run test:service
+      - name: Real nftables rules in a disposable namespace
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sh scripts/test-linux-firewall.sh
       - name: Desktop end-to-end
         if: runner.os == 'Windows'
-        run: npm run test:desktop
+        run: |
+          npm run tauri:debug
+          npm run test:app
