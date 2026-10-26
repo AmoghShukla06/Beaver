@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.0.0
+## 2.0.1
+
+2.0.1 is the first published build of the Rust rewrite; 2.0.0 was tagged but never published.
 
 Beaver is now written in Rust. The Electron shell and the Python service are gone; the React UI is unchanged and runs in the system WebView through Tauri.
 

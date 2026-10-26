@@ -1,6 +1,6 @@
 {
   "name": "beaver-security",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Open-source network security monitor for Windows and Linux: live connections, threat intelligence, remote-access and data-theft detection, native firewall control.",
   "license": "Apache-2.0",
