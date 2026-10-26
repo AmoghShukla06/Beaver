@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0
+
+### New
+- **First-run setup**: three steps for start at sign-in, packet capture (detects Npcap/libpcap and links to it), and notifications with a test button.
+- **New-app alerts**: one notification the first time a program reaches the internet, with publisher and destination. Existing apps are learned silently for 10 minutes; Windows components are skipped. *New apps* alert filter.
+- **Notification buttons** (Windows): *End session* on remote-access alerts, *Block app* on High risk and new apps, *Looks fine* to acknowledge.
+- **Website names from TLS**: the server name in the TLS handshake is read during capture, so HTTPS sites are named even when DNS is encrypted. Handshakes split across segments are reassembled.
+- **Auto-update** from GitHub Releases (Windows installer, AppImage), with a tray *Restart to update* item and a setting to turn it off.
+
+### Performance
+- Capture copies only the first 128 bytes of each frame; full frames only for DNS and TLS handshakes.
+- Sampling slows to 4 s on battery when no window is open.
+
 ## 1.0.0
 
 ### Detection

@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 1.0.x | Yes |
+| 1.1.x | Yes |
+| 1.0.x | Security fixes until 1.2 |
 | < 1.0 | No |
 
 ## Reporting a vulnerability
@@ -29,7 +30,8 @@ Beaver is a network-behavior monitor with threat intelligence and response actio
 - Feeds use HTTPS with certificate verification, host-pinned redirects, size limits and schema validation. Public-address checks reject poisoned private or reserved entries.
 - Firewall: validated IP literals and digit-only port lists, single-quoted PowerShell literals, base64-encoded fixed scripts, per-action UAC or polkit, a journal before mutation, verification, and rollback on partial failure. Beaver only modifies its own named rules and tables.
 - Termination re-verifies PID and process start time and refuses Beaver itself, PID 0/4 and core Windows processes. Active protection never stops validly signed or OS binaries.
-- Packet capture parses headers only and never stores payloads or packet objects.
+- Packet capture parses headers, DNS answers and the TLS ClientHello server name only. It never stores packet bytes, page contents or packet objects, and partial handshakes are discarded after 5 seconds.
+- Auto-update downloads from this repository's GitHub Releases over HTTPS. Installers are not yet code-signed, so update integrity relies on GitHub and TLS.
 
 ## Known gaps
 

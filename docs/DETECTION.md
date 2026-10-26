@@ -75,6 +75,14 @@ Domain matching uses observed DNS answers (packet capture) and, where the OS per
 
 Geography never contributes to risk.
 
+## New-app alerts
+
+The first time an executable path reaches a public IP, Beaver records it and creates an **Info** alert that shows the publisher, signature state and first destination. This is not a risk verdict; it gives you the chance to say "that's not mine." OS binaries (Authenticode `IsOSBinary`) are skipped. During the first 10 minutes after installing (or upgrading to 1.1), existing apps are learned silently so you don't get a flood of alerts. Alerts wait for executable inspection to finish.
+
+## Website names
+
+Domains come from three sources, in order of freshness: DNS answers (capture), the TLS ClientHello server name (capture), and the Windows DNS client cache. All are hints, not verified server identity, and they feed the domain threat feed and exfiltration rules.
+
 ## Alerts
 
 - High and Medium assessments create alerts. Deduplication key: application + level + significant rules (≥ 15 points), plus endpoints for threat-intel evidence. The same evidence is recorded once per 12 hours; new evidence escalates immediately.

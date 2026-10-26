@@ -366,6 +366,35 @@ def test_dns_answers_are_parsed_with_compression():
     assert cap.snapshot()[2]=={"9.9.9.9":"evil.example.com"}
     cap.handle(1,frame("8.8.8.8","192.168.1.2",53,5000,17,b"\x00\x01\x81\x80\x00\x01\x00\x05\xc0\x0c"))  # truncated and looping
 
+def client_hello(name, padding=0):
+    """Minimal TLS 1.2 record carrying a ClientHello with an optional padding extension before SNI."""
+    sni=name.encode(); server_name=struct.pack("!HBH",len(sni)+3,0,len(sni))+sni
+    ext=(struct.pack("!HH",21,padding)+b"\0"*padding if padding else b"")+struct.pack("!HH",0,len(server_name))+server_name
+    body=b"\x03\x03"+b"\x11"*32+b"\x00"+struct.pack("!H",2)+b"\x13\x01"+b"\x01\x00"+struct.pack("!H",len(ext))+ext
+    handshake=b"\x01"+len(body).to_bytes(3,"big")+body
+    return b"\x16\x03\x01"+struct.pack("!H",len(handshake))+handshake
+
+def tcp_frame(src,dst,sport,dport,payload):
+    l4=struct.pack("!HHIIBBHHH",sport,dport,0,0,0x50,0x18,65535,0,0)+payload
+    ip=struct.pack("!BBHHHBBH4s4s",0x45,0,20+len(l4),0,0,64,6,0,socket.inet_aton(src),socket.inet_aton(dst))
+    return b"\0"*12+struct.pack("!H",0x0800)+ip+l4
+
+def test_tls_server_name_from_client_hello():
+    from backend.pcap import client_hello as parse_hello
+    assert parse_hello(client_hello("Login.Example.org"))[1]=="login.example.org"
+    assert parse_hello(b"\x17\x03\x03\x00\x10") is None  # application data, not a handshake
+    cap=Capture(); frame=tcp_frame("192.168.1.2","93.184.216.34",50000,443,client_hello("www.example.com"))
+    cap.handle(1,frame[:128],lambda: frame)  # header-only prefix plus on-demand full frame, like the live reader
+    assert cap.snapshot()[2]=={"93.184.216.34":"www.example.com"} and cap.server_names==1
+
+def test_tls_server_name_split_across_segments():
+    hello=client_hello("split.example.net",padding=1600); cut=1200
+    cap=Capture()
+    cap.handle(1,tcp_frame("192.168.1.2","1.2.3.4",50001,443,hello[:cut]))
+    assert cap.snapshot()[2]=={} and cap.hellos
+    cap.handle(1,tcp_frame("192.168.1.2","1.2.3.4",50001,443,hello[cut:]))
+    assert cap.snapshot()[2]=={"1.2.3.4":"split.example.net"} and not cap.hellos
+
 def test_udp_unique_wildcard_binding():
     cap=Capture(); row=owned(protocol="UDP") | {"local_ip":"0.0.0.0","remote_ip":None,"remote_port":None}
     cap.update_owners([row]); assert cap.owner("UDP","192.168.1.2",50000,"8.8.8.8",53)=="a"
@@ -421,4 +450,38 @@ def test_permission_error_keeps_last_good_inventory(store):
     with patch("psutil.net_connections",side_effect=psutil.AccessDenied()):
         with pytest.raises(RuntimeError): monitor.sample()
     assert monitor.current==before
+    monitor.stop()
+
+def test_first_internet_is_recorded_once_and_learning_is_silent(store):
+    assert store.learning()  # fresh install
+    assert store.first_internet("C:\\a.exe") and not store.first_internet("C:\\a.exe")
+
+def live_app(path="C:\\Tools\\new.exe", binary=None):
+    return {"id":"n1","name":"new.exe","path":path,"binary":binary or {"state":"inspected","signature":"unsigned"}}
+
+def test_new_app_alert_after_learning(store):
+    events=[]; monitor=Monitor(store,lambda e,d: events.append(d))
+    conns=[connection("8.8.8.8",443,domain="dns.google",geo=None)]
+    store.installed_at=time.time()-10_000
+    monitor.new_app(live_app(),conns,time.time())
+    alert=store.alerts()[0]
+    assert alert["level"]=="Info" and alert["kind"]=="new-app" and alert["endpoint"]["domain"]=="dns.google" and events
+    monitor.new_app(live_app(),conns,time.time()); assert len(store.alerts())==1  # once per path
+    monitor.new_app(live_app("C:\\Windows\\System32\\x.exe",{"state":"inspected","os_binary":True}),conns,time.time())
+    monitor.new_app(live_app("C:\\Tools\\lan.exe"),[connection("192.168.1.9",445,domain=None,geo=None)],time.time())
+    monitor.new_app(live_app("C:\\Tools\\wait.exe",{"state":"pending"}),conns,time.time())
+    assert len(store.alerts())==1 and "C:\\Tools\\wait.exe" not in store.known_apps
+    monitor.stop()
+
+def test_new_apps_during_learning_are_recorded_silently(store):
+    monitor=Monitor(store)
+    monitor.new_app(live_app(),[connection("8.8.8.8",443,domain=None,geo=None)],time.time())
+    assert store.alerts()==[] and "C:\\Tools\\new.exe" in store.known_apps
+    monitor.stop()
+
+def test_sampling_slows_on_battery_only_without_a_window(store):
+    monitor=Monitor(store); battery=type("B",(),{"power_plugged":False})()
+    with patch("psutil.sensors_battery",return_value=battery):
+        monitor.visible=False; assert monitor.interval()==4
+        monitor.visible=True; assert monitor.interval()==2
     monitor.stop()

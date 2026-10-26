@@ -9,7 +9,7 @@ Electron main (tray, notifications, login item, firewall/dialog brokering)
   └─ private line-delimited JSON over stdin/stdout (requests + pushed events)
 Python service (current user, below-normal priority)
   ├─ psutil socket inventory every 2 s + interface counters
-  ├─ optional libpcap/Npcap header capture (ctypes, no payloads)
+  ├─ optional libpcap/Npcap capture (ctypes): headers, DNS answers, TLS server name (SNI)
   ├─ Windows DNS client cache (read-only, cache-only queries)
   ├─ executable inspector: SHA-256 + Authenticode (batched PowerShell), cached per path/size/mtime
   ├─ threat feeds: 6 HTTPS sources → in-memory sets, CIDR ranges, domain-hash array
@@ -29,6 +29,7 @@ The installed app has no HTTP service or listening socket. The Vite preview (`np
 - **Identity caching.** `psutil.create_time()` falls back to a full process snapshot (~4 ms) for protected processes, so those PIDs are revalidated every 30 s and fast ones every sample.
 - **Interface counters** (~25 ms on Windows) are read every third sample while no window is visible.
 - **Incremental persistence.** New connections are inserted immediately, ended ones are closed, and live rows are checkpointed every 30 s.
+- **Battery-aware sampling**: 4 s instead of 2 s while on battery with no window open.
 - **Slow RPCs** (feed refresh, firewall prompts, downloads) run on worker threads so snapshots never stall.
 - The service sets `BELOW_NORMAL_PRIORITY_CLASS` (Windows) or `nice 10` (Linux).
 
@@ -38,7 +39,7 @@ Applications are grouped by executable path. PID plus process start time disting
 
 ## Capture
 
-`backend/pcap.py` binds `pcap_findalldevs`, `pcap_open_live`, `pcap_compile/setfilter` (`ip or ip6`) and `pcap_next_ex` with ctypes, one reader thread per interface (snaplen 768, 500 ms timeout; the GIL is released while waiting). It parses Ethernet (VLAN/QinQ), BSD/Npcap loopback, Linux cooked v1/v2 and raw IP; IPv4 (fragment-aware) and IPv6 (extension headers); TCP/UDP ports; and DNS responses (A/AAAA with name compression and loop protection). Byte counts are IP-layer lengths from the IP header.
+`backend/pcap.py` binds `pcap_findalldevs`, `pcap_open_live`, `pcap_compile/setfilter` (`ip or ip6`) and `pcap_next_ex` with ctypes, one reader thread per interface (snaplen 768, 500 ms timeout; the GIL is released while waiting). It parses Ethernet (VLAN/QinQ), BSD/Npcap loopback, Linux cooked v1/v2 and raw IP; IPv4 (fragment-aware) and IPv6 (extension headers); TCP/UDP ports; and DNS responses (A/AAAA with name compression and loop protection). Byte counts are IP-layer lengths from the IP header. Each frame is copied as a 128-byte prefix; the full frame (snaplen 2048) is copied only for DNS responses and TLS handshakes. ClientHello records split across two segments are reassembled per flow (bounded to 256 pending flows, 16 KB, 5 s).
 
 ## Risk and alerts
 
@@ -52,5 +53,7 @@ See [DETECTION.md](DETECTION.md). Risk is a pure function of the app, its connec
 - **Remote access lockdown** is one inbound TCP rule for ports 23, 3389, 5900–5903, 5938, 5985 and 5986. SSH is deliberately excluded to avoid locking out servers.
 
 ## Packaging
+
+Auto-update uses `electron-updater` against GitHub Releases (`latest.yml`, `latest-linux.yml`, blockmaps for differential downloads). It checks 30 s after start and every 6 hours, and installs on quit or from the *Restart to update* tray item. Dev builds and test profiles never check.
 
 PyInstaller builds a one-folder `beaver-service`, which electron-builder ships under `resources/backend`. Releases are built by `.github/workflows/release.yml` on Windows and Ubuntu 22.04 (for glibc compatibility) when a `v*` tag is pushed. The workflow publishes the NSIS installer, AppImage, .deb and SHA-256 sums.

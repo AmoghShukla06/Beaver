@@ -2035,3 +2035,49 @@ a{color:var(--blue)}a:hover{color:var(--accent)}a:focus-visible{outline:2px soli
     justify-content: flex-start;
   }
 }
+
+/* v1.1: onboarding */
+dialog.onboarding {
+  width: min(560px, calc(100vw - 32px));
+}
+.onboarding .dialog-content {
+  text-align: left;
+}
+.onboarding-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.onboarding-progress i {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.onboarding-progress i.done {
+  background: var(--accent);
+}
+.onboarding-body {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 18px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.onboarding-body .setting-row {
+  padding: 8px 0;
+}
+.onboarding-body a,
+.inline-note a {
+  color: var(--blue);
+}
+.onboarding-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+.risk-info {
+  background: #1d2d44;
+  color: var(--blue);
+}

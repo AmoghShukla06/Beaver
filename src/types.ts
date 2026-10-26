@@ -1,4 +1,4 @@
-export type RiskLevel = "Low" | "Medium" | "High" | "Unknown";
+export type RiskLevel = "Low" | "Medium" | "High" | "Unknown" | "Info";
 export interface Evidence {
   rule: string;
   points: number;
@@ -94,6 +94,9 @@ export interface Alert {
     country: string | null;
   } | null;
   response?: { action: string; at: number; error?: string } | null;
+  kind?: "new-app";
+  publisher?: string | null;
+  signature?: string | null;
 }
 export interface Rule {
   id: string;
@@ -116,6 +119,9 @@ export interface Settings {
   start_at_login: boolean;
   snoozed_until: number;
   disabled_feeds: string[];
+  notify_new_apps: boolean;
+  onboarded: boolean;
+  auto_update: boolean;
 }
 export interface Feed {
   id: string;
@@ -171,6 +177,9 @@ export interface Snapshot {
       packets: number;
       attributed: number;
       method: string;
+      available?: boolean;
+      interfaces?: number;
+      server_names?: number;
     };
     intel: {
       source: string;

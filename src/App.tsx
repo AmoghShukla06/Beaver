@@ -40,6 +40,7 @@ import {
 } from "./components";
 import Connections from "./Connections";
 import Investigation from "./Investigation";
+import Onboarding from "./Onboarding";
 import Protection from "./Protection";
 import type { ObservedApp, Snapshot } from "./types";
 const WorldMap = lazy(() => import("./WorldMap"));
@@ -246,7 +247,9 @@ export default function App() {
         ? true
         : alertFilter === "Unreviewed"
           ? !a.acknowledged
-          : a.level === alertFilter,
+          : alertFilter === "New apps"
+            ? a.level === "Info"
+            : a.level === alertFilter,
     ) || [];
   return (
     <div className="app-shell">
@@ -532,10 +535,15 @@ export default function App() {
                             title="Packet capture"
                             text={
                               data.coverage.capture.active
-                                ? "Attributing observed IP-layer bytes"
-                                : data.coverage.capture.error
-                                  ? "Capture unavailable on this device"
-                                  : "Enable for application traffic speeds"
+                                ? (data.coverage.capture.server_names || 0).toLocaleString() +
+                                  " website names identified"
+                                : data.coverage.capture.available === false
+                                  ? data.coverage.platform === "Windows"
+                                    ? "Install Npcap for per-app speeds and domains"
+                                    : "Install libpcap for per-app speeds and domains"
+                                  : data.coverage.capture.error
+                                    ? "Capture unavailable on this device"
+                                    : "Enable for per-app speeds and domains"
                             }
                             status={
                               data.coverage.capture.active
@@ -745,7 +753,7 @@ export default function App() {
                     </div>
                     <div className="toolbar">
                       <div className="segmented" aria-label="Alert filter">
-                        {["Unreviewed", "High", "Medium", "All"].map((f) => (
+                        {["Unreviewed", "High", "Medium", "New apps", "All"].map((f) => (
                           <button
                             key={f}
                             aria-pressed={alertFilter === f}
@@ -793,7 +801,15 @@ export default function App() {
                                 <div>
                                   <h3>{alert.app_name}</h3>
                                   <p>
-                                    {alert.title} · {when(alert.created)}
+                                    {alert.title}
+                                    {alert.kind === "new-app" &&
+                                      " · " +
+                                        (alert.publisher
+                                          ? "signed by " + alert.publisher
+                                          : alert.signature === "unsigned"
+                                            ? "unsigned"
+                                            : "publisher unknown")}{" "}
+                                    · {when(alert.created)}
                                     {alert.endpoint &&
                                       " · " +
                                         (alert.endpoint.domain ||
@@ -1034,6 +1050,17 @@ export default function App() {
                             }
                           />
                           <Toggle
+                            label="Notify when a new app goes online"
+                            description="Once per program, the first time it reaches the internet. Windows components are skipped."
+                            checked={data.settings.notify_new_apps}
+                            disabled={busy || !desktop || !data.settings.notifications}
+                            onChange={() =>
+                              update({
+                                notify_new_apps: !data.settings.notify_new_apps,
+                              })
+                            }
+                          />
+                          <Toggle
                             label="Also notify for Medium risk"
                             description="Medium alerts are always recorded. Turn this on to be notified about them too."
                             checked={data.settings.notify_medium}
@@ -1256,6 +1283,15 @@ export default function App() {
                             }
                           />
                           <Toggle
+                            label="Install updates automatically"
+                            description="Checks GitHub Releases at startup and every 6 hours, downloads in the background, and installs when Beaver restarts. Only the version check leaves your device."
+                            checked={data.settings.auto_update}
+                            disabled={busy || !desktop}
+                            onChange={() =>
+                              update({ auto_update: !data.settings.auto_update })
+                            }
+                          />
+                          <Toggle
                             label="Close to system tray"
                             description="Keep monitoring when the window closes. The window is fully unloaded to save memory. Choose Quit Beaver from the tray to stop."
                             checked={data.settings.close_to_tray}
@@ -1326,6 +1362,15 @@ export default function App() {
           </>
         )}
       </main>
+      {desktop && data && !data.settings.onboarded && (
+        <Onboarding
+          data={data}
+          busy={busy}
+          update={(patch) =>
+            perform(() => request("settings", { patch }), "Settings saved.")
+          }
+        />
+      )}
       <Confirm
         action={confirmation}
         busy={busy}

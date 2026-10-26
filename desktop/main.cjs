@@ -28,6 +28,8 @@ let win = null,
   restarts = [],
   lastToast = 0,
   toastTimer = null,
+  updateReady = null,
+  updater = null,
   expected = "";
 const queued = [];
 const live = new Set(); // Notifications are garbage-collected (and lose click handlers) unless referenced.
@@ -99,6 +101,41 @@ async function start() {
   }
   // Launched at login: stay in the tray without a renderer (saves ~100 MB) unless no tray exists.
   if (!startHidden || !tray) showWindow();
+  startUpdater();
+}
+
+function startUpdater() {
+  if (!app.isPackaged || process.env.BEAVER_TEST_DATA) return;
+  try {
+    ({ autoUpdater: updater } = require("electron-updater"));
+  } catch {
+    return;
+  }
+  updater.logger = null;
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.on("error", () => {}); // offline or no release metadata: try again later
+  updater.on("update-downloaded", (info) => {
+    updateReady = info.version;
+    refreshTray();
+    toast({
+      title: `Beaver ${info.version} is ready`,
+      body: "Restart Beaver to finish updating. Monitoring resumes automatically.",
+      actions: [{ label: "Restart now", run: installUpdate }],
+    });
+  });
+  // Checks GitHub Releases at startup and every 6 hours; Settings can turn this off.
+  const check = () => {
+    if (settings.auto_update !== false && !updateReady)
+      updater.checkForUpdates().catch(() => {});
+  };
+  setTimeout(check, 30000);
+  setInterval(check, 6 * 3600 * 1000);
+}
+
+function installUpdate() {
+  quitting = true;
+  updater?.quitAndInstall(false, true);
 }
 
 function startBackend() {
@@ -150,7 +187,7 @@ function createWindow() {
     if (
       url === "https://db-ip.com/" ||
       /^https:\/\/www\.virustotal\.com\/gui\/file\/[0-9a-f]{64}$/.test(url) ||
-      /^https:\/\/(feodotracker\.abuse\.ch|www\.spamhaus\.org|github\.com|rules\.emergingthreats\.net|attack\.mitre\.org)\/[\w./#-]*$/.test(url)
+      /^https:\/\/(feodotracker\.abuse\.ch|www\.spamhaus\.org|github\.com|rules\.emergingthreats\.net|attack\.mitre\.org|npcap\.com)\/[\w./#-]*$/.test(url)
     )
       void shell.openExternal(url);
     return { action: "deny" };
@@ -305,7 +342,8 @@ function onEvent(event, data) {
     !(
       data.level === "High" ||
       (remote && settings.remote_alerts !== false) ||
-      settings.notify_medium
+      (data.level === "Info" && settings.notify_new_apps !== false) ||
+      (data.level === "Medium" && settings.notify_medium)
     )
   )
     return;
@@ -336,26 +374,59 @@ function flushAlerts() {
       (alert.endpoint.domain || alert.endpoint.ip) +
       (alert.endpoint.country ? " (" + alert.endpoint.country + ")" : "")
     : "";
-  let title, body;
+  const target = { page: "alerts", app_id: alert.app_id, alert_id: alert.id };
+  const review = { label: "Review", run: () => showWindow(target) };
+  const blockApp = alert.path && process.platform === "win32"
+    ? { label: "Block app", run: () => act(alert, "block", { kind: "application", target: alert.path }, `${alert.app_name} is blocked from the network.`) }
+    : null;
+  let title, body, actions;
   if (alert.response?.action === "terminated") {
     title = `Beaver stopped ${alert.app_name}`;
     body = `${alert.title}. Active protection ended the process. Review the evidence and block it if needed.`;
+    actions = [review, blockApp];
   } else if (remote) {
     title = `Remote access alert · ${alert.app_name}`;
-    body = `${remote.title}${where}. If you did not start this, click to end the session.`;
+    body = `${remote.title}${where}. If you did not start this, end the session now.`;
+    actions = [
+      { label: "End session", run: () => act(alert, "terminate", { app_id: alert.app_id }, `${alert.app_name} was stopped. Anyone connected through it is disconnected.`) },
+      review,
+    ];
+  } else if (alert.level === "Info") {
+    title = `New app online · ${alert.app_name}`;
+    body = `${alert.publisher ? "Signed by " + alert.publisher : alert.signature === "unsigned" ? "Unsigned program" : "Publisher unknown"}${where}. First internet connection seen by Beaver.`;
+    actions = [
+      { label: "Looks fine", run: () => act(alert, "acknowledge", { id: alert.id }, null) },
+      blockApp || review,
+    ];
   } else {
     title = `${alert.level} risk · ${alert.app_name}`;
     body = `${alert.title}${where}. Click to investigate.`;
+    actions = [{ label: "Investigate", run: () => showWindow(target) }, blockApp];
   }
   toast({
     title,
     body,
     critical: alert.level === "High" || Boolean(remote),
-    target: { page: "alerts", app_id: alert.app_id, alert_id: alert.id },
+    target,
+    actions: actions.filter(Boolean),
   });
 }
 
-function toast({ title, body, critical = false, target }) {
+// A notification button runs one service action directly; the OS still asks for elevation where required.
+function act(alert, method, params, done) {
+  backend
+    .call(method, params)
+    .then(() => done && toast({ title: "Beaver", body: done }))
+    .catch((error) =>
+      toast({
+        title: `Beaver could not complete that for ${alert.app_name}`,
+        body: error.message,
+        target: { page: "alerts", app_id: alert.app_id },
+      }),
+    );
+}
+
+function toast({ title, body, critical = false, target, actions = [] }) {
   if (!Notification.isSupported())
     throw new Error("Native notifications are unavailable in this desktop session.");
   const notification = new Notification({
@@ -364,6 +435,11 @@ function toast({ title, body, critical = false, target }) {
     icon: asset("beaver.png"),
     urgency: critical ? "critical" : "normal",
     timeoutType: critical ? "never" : "default",
+    actions: actions.map((a) => ({ type: "button", text: a.label })),
+  });
+  notification.on("action", (event, index) => {
+    release();
+    actions[event?.actionIndex ?? index]?.run();
   });
   live.add(notification);
   const release = () => live.delete(notification);
@@ -399,6 +475,9 @@ function refreshTray() {
       { label: line, enabled: false },
       { type: "separator" },
       { label: "Open Beaver", click: () => showWindow() },
+      ...(updateReady
+        ? [{ label: `Restart to update to ${updateReady}`, click: installUpdate }]
+        : []),
       {
         label: pending ? `Review alerts (${pending})` : "Alerts",
         click: () => showWindow({ page: "alerts" }),

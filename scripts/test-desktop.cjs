@@ -40,6 +40,18 @@ const until = async (page, predicate, { timeout = 20000 } = {}) => {
     passed.push("Real OS connections render in desktop");
     assert.equal(await page.evaluate(() => typeof window.require), "undefined");
     passed.push("Renderer has no Node require");
+    const setup = page.getByRole("dialog", { name: "Welcome to Beaver" });
+    await setup.waitFor();
+    await page.evaluate(require("axe-core").source);
+    const setupAxe = await page.evaluate(() => window.axe.run(document));
+    assert.equal(setupAxe.violations.length, 0, setupAxe.violations.map((v) => v.id).join(", "));
+    await setup.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("heading", { name: "See which website every app talks to" }).waitFor();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Start protecting" }).click();
+    await until(page, async () => (await window.beaver.snapshot()).settings.onboarded === true);
+    await page.locator("dialog.onboarding").waitFor({ state: "detached" });
+    passed.push("First-run setup wizard completes and is accessible");
     await page.screenshot({
       path: path.join(output, "overview.png"),
       fullPage: true,

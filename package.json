@@ -1,6 +1,6 @@
 {
   "name": "beaver-security",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Open-source network security monitor for Windows and Linux: live connections, threat intelligence, remote-access and data-theft detection, native firewall control.",
   "license": "Apache-2.0",
@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "d3-geo": "^3.1.1",
+    "electron-updater": "6.8.11",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -125,7 +126,14 @@
         "libcap2-bin"
       ]
     },
-    "publish": null
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AmoghShukla06",
+        "repo": "Beaver",
+        "releaseType": "release"
+      }
+    ]
   },
   "homepage": "https://github.com/AmoghShukla06/Beaver",
   "repository": {

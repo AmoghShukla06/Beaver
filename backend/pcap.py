@@ -75,7 +75,7 @@ def interfaces(lib):
     lib.pcap_freealldevs(devices)
     return names
 
-def open_live(lib, name, snaplen=768, timeout_ms=500):
+def open_live(lib, name, snaplen=2048, timeout_ms=500):
     err = ctypes.create_string_buffer(ERRBUF)
     handle = lib.pcap_open_live(name.encode(), snaplen, 0, timeout_ms, err)
     if not handle:
@@ -134,6 +134,36 @@ def parse(dlt, data):
         return ("TCP" if proto == 6 else "UDP"), src, sport, dst, dport, total, l4
     except (struct.error, ValueError, IndexError):
         return None
+
+def tcp_payload(data, l4):
+    """Offset of TCP payload, or None when the header is incomplete."""
+    if len(data) < l4 + 13:
+        return None
+    return l4 + (data[l4 + 12] >> 4) * 4
+
+def client_hello(payload):
+    """Parse a TLS ClientHello. Returns (needed_bytes, server_name): needed_bytes > len(payload) means the
+    hello continues in a later segment; server_name is None when absent. Returns None when not a ClientHello."""
+    if len(payload) < 6 or payload[0] != 0x16 or payload[1] != 3 or payload[5] != 1:
+        return None
+    needed = 5 + struct.unpack_from("!H", payload, 3)[0]
+    try:
+        pos = 5 + 4 + 2 + 32  # record header, handshake header, client_version, random
+        pos += 1 + payload[pos]  # session id
+        pos += 2 + struct.unpack_from("!H", payload, pos)[0]  # cipher suites
+        pos += 1 + payload[pos]  # compression methods
+        end = pos + 2 + struct.unpack_from("!H", payload, pos)[0]; pos += 2
+        while pos + 4 <= min(end, len(payload)):
+            kind, size = struct.unpack_from("!HH", payload, pos); pos += 4
+            if kind == 0 and pos + 5 <= len(payload):  # server_name: list length, type 0 (host_name), length, name
+                length = struct.unpack_from("!H", payload, pos + 3)[0]
+                if payload[pos + 2] == 0 and pos + 5 + length <= len(payload):
+                    name = bytes(payload[pos + 5:pos + 5 + length]).decode("ascii", "replace").lower().rstrip(".")
+                    return needed, name[:253] if "." in name else None
+            pos += size
+    except (struct.error, IndexError):
+        pass
+    return needed, None
 
 def read_name(data, pos, limit=0):
     labels = []; jumped = False; end = pos

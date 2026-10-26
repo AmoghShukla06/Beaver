@@ -69,7 +69,7 @@ export function RiskBadge({ level }: { level: RiskLevel }) {
   return (
     <span className={"risk risk-" + level.toLowerCase()}>
       <span className="risk-dot" />
-      {level} risk
+      {level === "Info" ? "New app" : level + " risk"}
     </span>
   );
 }

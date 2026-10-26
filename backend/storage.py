@@ -8,9 +8,11 @@ from pathlib import Path
 
 DEFAULTS = {"notifications": True, "notify_medium": False, "feed_updates": True, "capture": False,
             "retention_days": 7, "geoip_path": "", "close_to_tray": True, "start_at_login": False,
-            "snoozed_until": 0, "disabled_feeds": [], "remote_alerts": True, "active_protection": False}
+            "snoozed_until": 0, "disabled_feeds": [], "remote_alerts": True, "active_protection": False,
+            "notify_new_apps": True, "onboarded": False, "auto_update": True}
 BOOLEANS = ("notifications", "notify_medium", "feed_updates", "capture", "close_to_tray", "start_at_login",
-            "remote_alerts", "active_protection")
+            "remote_alerts", "active_protection", "notify_new_apps", "onboarded", "auto_update")
+LEARNING_SECONDS = 600  # after first install, record existing apps silently instead of alerting on each
 DEDUP_SECONDS = 12 * 3600
 
 class Store:
@@ -32,7 +34,12 @@ class Store:
             CREATE TABLE IF NOT EXISTS rules(id TEXT PRIMARY KEY, data TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS allowlist(id TEXT PRIMARY KEY, kind TEXT, target TEXT);
             CREATE TABLE IF NOT EXISTS binaries(path TEXT PRIMARY KEY, first_seen REAL, data TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS apps(path TEXT PRIMARY KEY, first_internet REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value REAL NOT NULL);
         """)
+        self.db.execute("INSERT OR IGNORE INTO meta VALUES ('installed_at', ?)", (time.time(),))
+        self.installed_at = self.db.execute("SELECT value FROM meta WHERE key='installed_at'").fetchone()[0]
+        self.known_apps = {r[0] for r in self.db.execute("SELECT path FROM apps")}
         if "key" not in {r["name"] for r in self.db.execute("PRAGMA table_info(alerts)")}:
             self.db.execute("ALTER TABLE alerts ADD COLUMN key TEXT")
         self.db.execute("CREATE INDEX IF NOT EXISTS alert_key ON alerts(key,created)")
@@ -89,6 +96,18 @@ class Store:
                 return False
             self.db.execute("INSERT INTO alerts(id,app_id,created,data,key) VALUES (?,?,?,?,?)",
                             (alert["id"], alert["app_id"], alert["created"], json.dumps(alert), key))
+        return True
+
+    def learning(self):
+        return time.time() - self.installed_at < LEARNING_SECONDS
+
+    def first_internet(self, path):
+        """True exactly once per executable path: the first time it reaches the internet."""
+        if path in self.known_apps:
+            return False
+        with self.lock, self.db:
+            self.db.execute("INSERT OR IGNORE INTO apps VALUES (?,?)", (path, time.time()))
+        self.known_apps.add(path)
         return True
 
     def update_alert(self, alert):

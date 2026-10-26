@@ -13,7 +13,7 @@ from .binaries import Binaries
 from .capture import Capture
 from .dnscache import DnsCache
 from .intelligence import Intelligence, Geolocation
-from .risk import PROTECTED, assess
+from .risk import PROTECTED, assess, public
 
 # Active protection only acts on these unambiguous behaviors, and never on OS or validly signed binaries.
 AUTO_RESPONSE = {"reverse-shell", "masquerading", "fileless", "tampered-signature", "known-c2", "threat-intel", "intel-domain", "exfil-channel"}
@@ -33,7 +33,8 @@ class Monitor:
         self.previous_bytes = {}; self.last_io = None; self.io_tick = None; self.last_tick = None
         self.series = collections.deque(maxlen=1800); self.visible = True; self.samples = 0
         self.started = time.time(); self.last_feed_attempt = 0; self.last_prune = 0; self.last_checkpoint = 0
-        self.dns_names = {}; self.last_dns = 0; self.starts = {}; self.summary = None
+        self.dns_names = {}; self.last_dns = 0; self.starts = {}; self.summary = None; self.listening = {}
+        self.capture_available = None; self.on_battery = False; self.last_power = None
         self.state = {"ready": False, "apps": [], "connections": [], "traffic": [], "sampled_at": None}
 
     def identity(self, pid, now):
@@ -158,6 +159,7 @@ class Monitor:
             if aid in apps and len(starts) >= 6:
                 beacons[aid][(ip, port)] = list(starts)
         elapsed = tick - self.last_tick if self.last_tick else None
+        self.listening = listening
         by_id = {i["id"]: i for i in identities.values()}
         for aid, app in apps.items():
             self.observations[aid] += 1
@@ -175,6 +177,7 @@ class Monitor:
             # Wait for executable inspection before a Medium alert so a late signature result does not re-alert.
             if app["risk"]["level"] == "High" or (app["risk"]["level"] == "Medium" and (binary or {}).get("state") != "pending"):
                 self.alert(app, grouped[aid], now, settings["active_protection"])
+            self.new_app(app, grouped[aid], now)
         self.previous_bytes = totals
         self.traffic(tick, now)
         self.last_tick = tick; self.error = None; self.samples += 1
@@ -227,6 +230,25 @@ class Monitor:
                 except (ValueError, psutil.Error) as exc:
                     alert["response"] = {"action": "failed", "at": time.time(), "error": str(exc)[:200]}
                 self.store.update_alert(alert)
+            self.emit("alert", alert | {"acknowledged": False})
+
+    def new_app(self, app, connections, now):
+        """Record an executable's first internet connection; alert unless it is an OS binary or Beaver is still learning."""
+        binary = app.get("binary") or {}
+        if not app["path"] or binary.get("state") == "pending" or app["path"] in self.store.known_apps:
+            return
+        first = next((c for c in connections if c.get("remote_ip") and public(c["remote_ip"])
+                      and (c["protocol"], c["local_port"]) not in self.listening.get(app["id"], ())), None)
+        if not first or not self.store.first_internet(app["path"]) or self.store.learning() or binary.get("os_binary"):
+            return
+        alert = {"id": uuid.uuid4().hex, "key": "new-app|" + app["path"], "app_id": app["id"], "app_name": app["name"],
+                 "path": app["path"], "created": now, "level": "Info", "kind": "new-app", "title": "First internet connection",
+                 "publisher": binary.get("publisher"), "signature": binary.get("signature"),
+                 "risk": {"level": "Info", "score": None, "evidence": [], "reason": "A program connected to the internet for the first time.",
+                          "allowlisted": False},
+                 "endpoint": {"ip": first["remote_ip"], "port": first["remote_port"], "domain": first["domain"],
+                              "country": (first["geo"] or {}).get("country")}}
+        if self.store.add_alert(alert):
             self.emit("alert", alert | {"acknowledged": False})
 
     def terminate(self, app_id, automatic=False, app=None):
@@ -291,13 +313,24 @@ class Monitor:
             elevated = os.geteuid() == 0
         data["coverage"] = {"platform": self.system, "elevated": elevated, "inventory_error": self.error,
             "inventory": "OS socket polling every 2 seconds; short-lived connections can be missed. Linux may omit sockets without sufficient permissions.",
-            "capture": self.capture.status(), "intel": self.intel.status(),
+            "capture": self.capture.status() | {"available": self.capture_probe()}, "intel": self.intel.status(),
+            "power": {"on_battery": self.on_battery, "interval": self.interval()},
             "geo": {"available": self.geo.reader is not None, "error": self.geo.error, "provider": self.geo.reader.metadata().database_type if self.geo.reader else None},
             "dns_cache": {"available": bool(self.dns.api), "names": len(self.dns_names), "error": self.dns.error},
             "binaries": {"error": self.binaries.error, "signatures": self.system == "Windows"},
             "domains": "Domains come from observed plaintext DNS answers" + (" and the Windows DNS client cache" if self.dns.api else "")
                        + ". Encrypted DNS (DoH/DoT) lookups are not visible."}
         return data
+
+    def capture_probe(self):
+        """Whether the packet-capture library is installed (cached). Does not open any interface."""
+        if self.capture_available is None:
+            from . import pcap
+            try:
+                pcap.load(); self.capture_available = True
+            except (RuntimeError, OSError):
+                self.capture_available = False
+        return self.capture_available
 
     def set_visible(self, visible):
         self.visible = bool(visible)
@@ -309,7 +342,19 @@ class Monitor:
                 self.sample()
             except Exception as exc:
                 self.error = str(exc)[:300]
-            self.stop_event.wait(max(.1, INTERVAL - (time.monotonic() - start)))
+            self.stop_event.wait(max(.1, self.interval() - (time.monotonic() - start)))
+
+    def interval(self):
+        """2 s normally; 4 s when no window is open and the device runs on battery."""
+        now = time.monotonic()
+        if self.last_power is None or now - self.last_power > 60:
+            self.last_power = now
+            try:
+                battery = psutil.sensors_battery()
+                self.on_battery = bool(battery and not battery.power_plugged)
+            except (OSError, AttributeError, RuntimeError):
+                self.on_battery = False
+        return INTERVAL * 2 if self.on_battery and not self.visible else INTERVAL
 
     def start(self):
         self.thread = threading.Thread(target=self.loop, name="beaver-monitor", daemon=True); self.thread.start()
