@@ -9,27 +9,20 @@ class Backend {
     this.error = null;
     this.onEvent = onEvent || (() => {});
     const root = path.resolve(__dirname, "..");
+    const name = process.platform === "win32" ? "beaver-service.exe" : "beaver-service";
+    // The Rust service: bundled under resources/backend when packaged, cargo's release output in development.
     const executable = packaged
-      ? path.join(
-          resources,
-          "backend",
-          "beaver-service",
-          process.platform === "win32"
-            ? "beaver-service.exe"
-            : "beaver-service",
-        )
-      : path.join(
-          root,
-          ".venv",
-          process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
-        );
+      ? path.join(resources, "backend", name)
+      : path.join(root, "service", "target", "release", name);
     if (!fs.existsSync(executable))
       throw new Error(
-        "Telemetry service is missing. Run the documented setup or reinstall Beaver.",
+        packaged
+          ? "Telemetry service is missing. Reinstall Beaver."
+          : "Telemetry service is not built. Run: npm run service:build",
       );
-    const args = packaged ? [] : ["-m", "backend.service"];
+    const args = [];
     this.child = spawn(executable, [...args, "--data-dir", directory], {
-      cwd: packaged ? path.dirname(executable) : root,
+      cwd: path.dirname(executable),
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
